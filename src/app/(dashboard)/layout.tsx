@@ -1,3 +1,5 @@
+import { auth } from "@clerk/nextjs";
+import { redirect } from "next/navigation";
 import Sidebar from '../../components/navigation/sidebar'
 import TopNav from '../../components/navigation/top-nav'
 
@@ -6,15 +8,19 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
+  const { userId } = auth();
+
+  if (!userId) {
+    redirect("/sign-in");
+  }
+
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="h-screen flex">
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <main className="flex-1 overflow-y-auto">
         <TopNav />
-        <main className="flex-1 overflow-y-auto bg-gray-100 px-6 py-8">
-          {children}
-        </main>
-      </div>
+        <div className="p-6">{children}</div>
+      </main>
     </div>
   )
 }
