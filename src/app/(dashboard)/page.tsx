@@ -2,11 +2,18 @@
 
 import { auth } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
-import { useState } from "react";
+import { useEffect } from "react";
+import { useUIStore } from "@/store/use-ui-store";
+import { useAnalyticsStore } from "@/store/use-analytics-store";
 
 export default function DashboardPage() {
   const { userId } = auth();
-  const [selectedPeriod, setSelectedPeriod] = useState("30_days");
+  const { selectedPeriod, setSelectedPeriod } = useUIStore();
+  const { analytics, isLoading, error, fetchAnalytics } = useAnalyticsStore();
+
+  useEffect(() => {
+    fetchAnalytics(selectedPeriod);
+  }, [selectedPeriod, fetchAnalytics]);
 
   if (!userId) {
     redirect("/sign-in");
@@ -18,6 +25,22 @@ export default function DashboardPage() {
     { label: "Last 90 days", value: "90_days" },
   ];
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-red-500 p-4 bg-red-50 rounded-md">
+        Error loading analytics: {error}
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* Page Header */}
@@ -27,7 +50,7 @@ export default function DashboardPage() {
           {periods.map((period) => (
             <button
               key={period.value}
-              onClick={() => setSelectedPeriod(period.value)}
+              onClick={() => setSelectedPeriod(period.value as any)}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 selectedPeriod === period.value
                   ? "bg-blue-500 text-white"
@@ -47,12 +70,14 @@ export default function DashboardPage() {
           <div className="space-y-4">
             <div>
               <p className="text-gray-600">Total Posts</p>
-              <p className="text-2xl font-bold">48</p>
+              <p className="text-2xl font-bold">{analytics?.totalPosts || 0}</p>
               <p className="text-sm text-green-600">↑ 12% from last period</p>
             </div>
             <div>
               <p className="text-gray-600">Engagement Rate</p>
-              <p className="text-2xl font-bold">5.2%</p>
+              <p className="text-2xl font-bold">
+                {analytics?.engagementRate?.toFixed(1) || 0}%
+              </p>
               <p className="text-sm text-red-600">↓ 0.8% from last period</p>
             </div>
           </div>
