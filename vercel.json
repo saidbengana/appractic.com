@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "env": {
+    "NEXTAUTH_URL": "https://${VERCEL_URL}",
+    "VERCEL_POSTGRES_PRISMA_URL": "${POSTGRES_PRISMA_URL}",
+    "VERCEL_POSTGRES_URL_NON_POOLING": "${POSTGRES_URL_NON_POOLING}"
+  }
+}
