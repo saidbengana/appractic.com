@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs';
-import { db } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -35,15 +35,20 @@ export async function POST(request: Request) {
     await writeFile(join(UPLOAD_DIR, filename), buffer);
 
     // Create media record in database
-    const media = await db.media.create({
-      data: {
+    const { data: media, error } = await supabase
+      .from('media')
+      .insert({
+        user_id: userId,
         name: file.name,
-        mimeType: file.type,
+        mime_type: file.type,
         path,
         size: file.size,
-        sizeTotal: file.size, // Will be updated after conversions
-      },
-    });
+        size_total: file.size, // Will be updated after conversions
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
 
     // TODO: Process media conversions asynchronously
     // This will be implemented with a media processing service
@@ -68,19 +73,24 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const postId = searchParams.get('postId');
 
-    const media = await db.media.findMany({
-      where: postId ? {
-        posts: {
-          some: {
-            id: postId,
-            userId,
-          },
-        },
-      } : {},
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    let query = supabase
+      .from('media')
+      .select(`
+        *,
+        posts!media_posts (
+          id
+        )
+      `)
+      .eq('user_id', userId);
+
+    if (postId) {
+      query = query.eq('posts.id', postId);
+    }
+
+    const { data: media, error } = await query
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
 
     return NextResponse.json(media);
   } catch (error) {
@@ -100,25 +110,31 @@ export async function DELETE(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const mediaId = searchParams.get('id');
 
-    if (!id) {
+    if (!mediaId) {
       return NextResponse.json(
         { error: 'Media ID is required' },
         { status: 400 }
       );
     }
 
-    // Get media details first
-    const media = await db.media.findUnique({
-      where: { id },
-    });
+    // Check if media exists and belongs to user
+    const { data: media, error: findError } = await supabase
+      .from('media')
+      .select()
+      .eq('id', mediaId)
+      .eq('user_id', userId)
+      .single();
 
-    if (!media) {
-      return NextResponse.json(
-        { error: 'Media not found' },
-        { status: 404 }
-      );
+    if (findError) {
+      if (findError.code === 'PGRST116') {
+        return NextResponse.json(
+          { error: 'Media not found' },
+          { status: 404 }
+        );
+      }
+      throw findError;
     }
 
     // Delete file from disk
@@ -127,14 +143,19 @@ export async function DELETE(request: Request) {
       await unlink(filePath);
     } catch (error) {
       console.error('Error deleting file:', error);
+      // Continue with database deletion even if file deletion fails
     }
 
     // Delete from database
-    await db.media.delete({
-      where: { id },
-    });
+    const { error: deleteError } = await supabase
+      .from('media')
+      .delete()
+      .eq('id', mediaId)
+      .eq('user_id', userId);
 
-    return NextResponse.json({ message: 'Media deleted successfully' });
+    if (deleteError) throw deleteError;
+
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting media:', error);
     return NextResponse.json(

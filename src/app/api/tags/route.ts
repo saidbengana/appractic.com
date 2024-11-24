@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs';
-import { db } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function GET() {
   try {
@@ -9,19 +9,28 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const tags = await db.tag.findMany({
-      where: { userId },
-      include: {
-        _count: {
-          select: { posts: true },
-        },
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    });
+    const { data: tags, error } = await supabase
+      .from('tags')
+      .select(`
+        *,
+        post_tags (
+          count
+        )
+      `)
+      .eq('user_id', userId)
+      .order('name');
 
-    return NextResponse.json(tags);
+    if (error) throw error;
+
+    // Transform the data to match the expected format
+    const formattedTags = tags.map(tag => ({
+      ...tag,
+      _count: {
+        posts: tag.post_tags?.length || 0
+      }
+    }));
+
+    return NextResponse.json(formattedTags);
   } catch (error) {
     console.error('Error fetching tags:', error);
     return NextResponse.json(
@@ -48,13 +57,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const tag = await db.tag.create({
-      data: {
-        userId,
+    const { data: tag, error } = await supabase
+      .from('tags')
+      .insert({
+        user_id: userId,
         name,
-        hexColor,
-      },
-    });
+        color: hexColor,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
 
     return NextResponse.json(tag);
   } catch (error) {
@@ -83,16 +96,18 @@ export async function PUT(request: Request) {
       );
     }
 
-    const tag = await db.tag.update({
-      where: {
-        id,
-        userId,
-      },
-      data: {
+    const { data: tag, error } = await supabase
+      .from('tags')
+      .update({
         name,
-        hexColor,
-      },
-    });
+        color: hexColor,
+      })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
 
     return NextResponse.json(tag);
   } catch (error) {
@@ -111,8 +126,8 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const url = new URL(request.url);
+    const id = url.searchParams.get('id');
 
     if (!id) {
       return NextResponse.json(
@@ -121,14 +136,15 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await db.tag.delete({
-      where: {
-        id,
-        userId,
-      },
-    });
+    const { error } = await supabase
+      .from('tags')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
 
-    return NextResponse.json({ message: 'Tag deleted successfully' });
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting tag:', error);
     return NextResponse.json(
