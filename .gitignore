@@ -36,15 +36,6 @@ yarn-error.log*
 # local env files
 .env*.local
 
-# vercel
-.vercel
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# Sentry Config File
-.sentryclirc
-
-# Sentry Auth Token
-.env.sentry-build-plugin

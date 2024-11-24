@@ -1,10 +1,7 @@
-const { withSentryConfig } = require('@sentry/nextjs');
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
   compress: true,
-  productionBrowserSourceMaps: true,
   images: {
     domains: ['appractic.com'],
   },
@@ -40,10 +37,4 @@ const nextConfig = {
   ],
 };
 
-const sentryWebpackPluginOptions = {
-  silent: true,
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
-};
-
-module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);
+module.exports = nextConfig;
