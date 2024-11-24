@@ -1,11 +1,15 @@
-import { PrismaClient } from '@prisma/client'
+import { createClient } from '@supabase/supabase-js';
 
-declare global {
-  var prisma: PrismaClient | undefined
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase environment variables');
 }
 
-export const db = globalThis.prisma || new PrismaClient()
-
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.prisma = db
-}
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+  },
+});
