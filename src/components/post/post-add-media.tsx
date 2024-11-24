@@ -1,3 +1,5 @@
+'use client'
+
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -14,14 +16,16 @@ import {
 } from "@/components/ui/dialog"
 import { Image, Video, Upload } from "lucide-react"
 
-interface MediaItem {
+interface PostMediaItem {
+  id: string
   url: string
   type: "image" | "video"
+  thumbnail?: string
   aspectRatio?: number
 }
 
 interface PostAddMediaProps {
-  onMediaAdd: (media: MediaItem) => void
+  onMediaAdd: (media: PostMediaItem) => void
   disabled?: boolean
   className?: string
 }
@@ -31,110 +35,94 @@ export function PostAddMedia({
   disabled = false,
   className,
 }: PostAddMediaProps) {
-  const [open, setOpen] = React.useState(false)
+  const [isOpen, setIsOpen] = React.useState(false)
   const [url, setUrl] = React.useState("")
   const [type, setType] = React.useState<"image" | "video">("image")
-  const [aspectRatio, setAspectRatio] = React.useState<number | undefined>(undefined)
-  const [isLoading, setIsLoading] = React.useState(false)
+  const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = React.useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!url || isLoading) return
+    if (!url) return
 
-    setIsLoading(true)
+    setLoading(true)
+    setError(null)
+
     try {
-      // Load the media to get dimensions
-      if (type === "image") {
-        const img = new Image()
-        img.src = url
-        await new Promise((resolve, reject) => {
-          img.onload = () => {
-            setAspectRatio(img.width / img.height)
-            resolve(null)
-          }
-          img.onerror = reject
-        })
-      } else if (type === "video") {
-        const video = document.createElement("video")
-        video.src = url
-        await new Promise((resolve, reject) => {
-          video.onloadedmetadata = () => {
-            setAspectRatio(video.videoWidth / video.videoHeight)
-            resolve(null)
-          }
-          video.onerror = reject
-        })
-      }
-
-      onMediaAdd({
+      // Here you would typically validate the URL and maybe process the media
+      // For now, we'll just create a media item with the URL
+      const mediaItem: PostMediaItem = {
+        id: crypto.randomUUID(),
         url,
         type,
-        aspectRatio,
-      })
+        // You might want to fetch these values
+        thumbnail: type === "video" ? undefined : url,
+        aspectRatio: undefined,
+      }
 
+      onMediaAdd(mediaItem)
+      setIsOpen(false)
       setUrl("")
       setType("image")
-      setAspectRatio(undefined)
-      setOpen(false)
-    } catch (error) {
-      console.error("Error loading media:", error)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add media")
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
-  }
+  }, [url, type, onMediaAdd])
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button
           variant="outline"
           size="sm"
           className={cn(
-            "flex items-center space-x-2",
+            "flex items-center gap-2",
             disabled && "opacity-50 cursor-not-allowed",
             className
           )}
           disabled={disabled}
         >
           <Upload className="h-4 w-4" />
-          <span>Add Media</span>
+          Add Media
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Media</DialogTitle>
           <DialogDescription>
-            Add an image or video to your post. Supported formats: JPG, PNG, GIF, MP4
+            Add an image or video to your post by providing a URL.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="mediaType">Media Type</Label>
-            <div className="flex space-x-2">
+            <Label htmlFor="type">Media Type</Label>
+            <div className="flex gap-2">
               <Button
                 type="button"
                 variant={type === "image" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setType("image")}
-                className="flex items-center space-x-2"
+                className="flex items-center gap-2"
               >
                 <Image className="h-4 w-4" />
-                <span>Image</span>
+                Image
               </Button>
               <Button
                 type="button"
                 variant={type === "video" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setType("video")}
-                className="flex items-center space-x-2"
+                className="flex items-center gap-2"
               >
                 <Video className="h-4 w-4" />
-                <span>Video</span>
+                Video
               </Button>
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="url">Media URL</Label>
+            <Label htmlFor="url">URL</Label>
             <Input
               id="url"
               placeholder={`Enter ${type} URL`}
@@ -142,13 +130,22 @@ export function PostAddMedia({
               onChange={(e) => setUrl(e.target.value)}
             />
           </div>
+          {error && (
+            <p className="text-sm text-destructive">{error}</p>
+          )}
           <DialogFooter>
             <Button
-              type="submit"
-              disabled={!url || isLoading}
-              className={cn(isLoading && "opacity-50 cursor-wait")}
+              type="button"
+              variant="outline"
+              onClick={() => setIsOpen(false)}
             >
-              {isLoading ? "Adding..." : "Add Media"}
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={!url || loading}
+            >
+              {loading ? "Adding..." : "Add Media"}
             </Button>
           </DialogFooter>
         </form>

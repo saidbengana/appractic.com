@@ -1,154 +1,208 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { cloneDeep } from 'lodash'
-import { Editor } from '@/components/package/editor'
-import { EmojiPicker } from '@/components/package/emoji-picker'
-import { Panel } from '@/components/ui/panel'
-import { Account } from '@/components/account/account'
-import { PostVersionsTab } from '@/components/post/post-versions-tab'
-import { PostAddMedia } from '@/components/post/post-add-media'
-import { PostMedia } from '@/components/post/post-media'
-import { PostCharacterCount } from '@/components/post/post-character-count'
-import { usePost } from '@/hooks/use-post'
-import { usePostVersions } from '@/hooks/use-post-versions'
-import { useEditor } from '@/hooks/use-editor'
+'use client'
+
+import { useState, useCallback } from 'react'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useForm } from 'react-hook-form'
+import * as z from 'zod'
+import { format } from 'date-fns'
+import { CalendarIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { usePosts } from '@/hooks/use-posts'
+import { PostMedia } from '@/types/schema'
+import { PostAddMedia } from './post-add-media'
+import { ScheduleForm } from './schedule-form'
+import { ScheduleConfig } from '@/types/schedule'
+
+const formSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  content: z.string().min(1, 'Content is required'),
+  scheduledAt: z.date().optional(),
+  schedule: z.any().optional(),
+})
+
+type FormData = z.infer<typeof formSchema>
 
 interface PostFormProps {
-  form: {
-    accounts: any[]
-    versions: any[]
+  onSuccess?: () => void
+  initialData?: {
+    id?: string
+    title?: string
+    content?: string
+    scheduledAt?: Date
+    media?: PostMedia[]
+    schedule?: ScheduleConfig
   }
-  accounts: any[]
 }
 
-export function PostForm({ form, accounts }: PostFormProps) {
-  const { editAllowed } = usePost()
-  const [activeVersion, setActiveVersion] = useState<string | null>(null)
+export function PostForm({ onSuccess, initialData }: PostFormProps) {
+  const { createPost, updatePost } = usePosts()
+  const [media, setMedia] = useState<PostMedia[]>(initialData?.media || [])
+  const [schedule, setSchedule] = useState<ScheduleConfig | undefined>(initialData?.schedule)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const selectedAccounts = useMemo(() => {
-    return accounts.filter((account) => form.accounts.includes(account))
-  }, [accounts, form.accounts])
+  const form = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      title: initialData?.title || '',
+      content: initialData?.content || '',
+      scheduledAt: initialData?.scheduledAt,
+      schedule: initialData?.schedule,
+    },
+  })
 
-  const selectAccount = useCallback((account: any) => {
-    if (!editAllowed) return
-
-    if (form.accounts.includes(account)) {
-      form.accounts = form.accounts.filter((item) => item !== account)
-      return
-    }
-
-    const updatedAccounts = [...form.accounts, account]
-    form.accounts = updatedAccounts
-  }, [editAllowed, form.accounts])
-
-  const isAccountSelected = useCallback((account: any) => {
-    return form.accounts.includes(account)
-  }, [form.accounts])
-
-  const isAccountUnselectable = useCallback((account: any) => {
-    return !editAllowed && !isAccountSelected(account)
-  }, [editAllowed, isAccountSelected])
-
-  const content = useMemo(() => {
-    return getAccountVersion(form.versions, activeVersion)?.content
-  }, [form.versions, activeVersion])
-
-  const updateContent = useCallback((contentIndex: number, key: string, value: any) => {
-    if (!editAllowed) return
-
-    const versions = cloneDeep(form.versions)
-    versions[contentIndex].content[key] = value
-    form.versions = versions
-  }, [editAllowed, form.versions])
-
-  const addVersion = useCallback((accountId: string) => {
-    if (!editAllowed) return
-
-    const versions = cloneDeep(form.versions)
-    versions.push({
-      account_id: accountId,
-      content: {
-        text: '',
-        media: []
+  const onSubmit = useCallback(async (data: FormData) => {
+    try {
+      setIsSubmitting(true)
+      const postData = {
+        ...data,
+        media: media.map(m => ({
+          url: m.url,
+          type: m.type,
+          thumbnail: m.thumbnail,
+          aspectRatio: m.aspectRatio,
+        })),
       }
-    })
-    form.versions = versions
-  }, [editAllowed, form.versions])
 
-  const removeVersion = useCallback((accountId: string) => {
-    if (!editAllowed) return
+      if (initialData?.id) {
+        await updatePost(initialData.id, postData)
+      } else {
+        await createPost(postData)
+      }
 
-    const versions = cloneDeep(form.versions)
-    const index = versions.findIndex((version) => version.account_id === accountId)
-    if (index !== -1) {
-      versions.splice(index, 1)
-      form.versions = versions
+      form.reset()
+      setMedia([])
+      setSchedule(undefined)
+      onSuccess?.()
+    } finally {
+      setIsSubmitting(false)
     }
-  }, [editAllowed, form.versions])
+  }, [createPost, updatePost, form, media, initialData?.id, onSuccess])
 
-  useEffect(() => {
-    setupVersions()
+  const onMediaChange = useCallback((newMedia: PostMedia[]) => {
+    setMedia(newMedia)
   }, [])
 
   return (
-    <div className="space-y-4">
-      <Panel>
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {accounts.map((account) => (
-              <Account
-                key={account.id}
-                account={account}
-                selected={isAccountSelected(account)}
-                disabled={isAccountUnselectable(account)}
-                onClick={() => selectAccount(account)}
-              />
-            ))}
-          </div>
-          
-          {selectedAccounts.length > 0 && (
-            <>
-              <PostVersionsTab
-                accounts={selectedAccounts}
-                activeVersion={activeVersion}
-                onVersionChange={setActiveVersion}
-              />
-              
-              <div className="space-y-4">
-                <Editor
-                  content={content?.text}
-                  onChange={(value) => updateContent(activeVersion, 'text', value)}
-                />
-                
-                <div className="flex items-center justify-between">
-                  <EmojiPicker
-                    onSelect={(emoji) => {
-                      const text = content?.text || ''
-                      updateContent(activeVersion, 'text', text + emoji)
-                    }}
-                  />
-                  <PostCharacterCount text={content?.text || ''} />
-                </div>
-                
-                <PostAddMedia
-                  media={content?.media || []}
-                  onMediaAdd={(media) => updateContent(activeVersion, 'media', media)}
-                />
-                
-                {content?.media?.length > 0 && (
-                  <PostMedia
-                    media={content.media}
-                    onMediaRemove={(index) => {
-                      const media = [...content.media]
-                      media.splice(index, 1)
-                      updateContent(activeVersion, 'media', media)
-                    }}
-                  />
-                )}
-              </div>
-            </>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <FormField
+          control={form.control}
+          name="title"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Title</FormLabel>
+              <FormControl>
+                <Input placeholder="Enter post title" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
           )}
-        </div>
-      </Panel>
-    </div>
+        />
+
+        <FormField
+          control={form.control}
+          name="content"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Content</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="What's on your mind?"
+                  className="min-h-[100px]"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="scheduledAt"
+          render={({ field }) => (
+            <FormItem className="flex flex-col">
+              <FormLabel>Schedule Post</FormLabel>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FormControl>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        'w-[240px] pl-3 text-left font-normal',
+                        !field.value && 'text-muted-foreground'
+                      )}
+                    >
+                      {field.value ? (
+                        format(field.value, 'PPP')
+                      ) : (
+                        <span>Pick a date</span>
+                      )}
+                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                    </Button>
+                  </FormControl>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={field.value}
+                    onSelect={field.onChange}
+                    disabled={(date) =>
+                      date < new Date()
+                    }
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <FormDescription>
+                Leave empty to post immediately
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="schedule"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Schedule</FormLabel>
+              <FormControl>
+                <ScheduleForm
+                  initialConfig={field.value}
+                  onChange={field.onChange}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <PostAddMedia media={media} onChange={onMediaChange} />
+
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? 'Saving...' : initialData ? 'Update Post' : 'Create Post'}
+        </Button>
+      </form>
+    </Form>
   )
 }

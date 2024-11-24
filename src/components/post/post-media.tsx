@@ -1,3 +1,5 @@
+'use client'
+
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -10,14 +12,16 @@ import {
   DropResult,
 } from "@hello-pangea/dnd"
 
-interface MediaItem {
+interface PostMediaItem {
+  id: string
   url: string
   type: "image" | "video"
+  thumbnail?: string
   aspectRatio?: number
 }
 
 interface PostMediaProps {
-  media: MediaItem[]
+  media: PostMediaItem[]
   onMediaRemove?: (index: number) => void
   onMediaReorder?: (startIndex: number, endIndex: number) => void
   disabled?: boolean
@@ -31,37 +35,33 @@ export function PostMedia({
   disabled = false,
   className,
 }: PostMediaProps) {
-  const handleDragEnd = (result: DropResult) => {
-    if (!result.destination || disabled || !onMediaReorder) return
+  const handleDragEnd = React.useCallback(
+    (result: DropResult) => {
+      if (!result.destination || !onMediaReorder) return
 
-    const sourceIndex = result.source.index
-    const destinationIndex = result.destination.index
+      const sourceIndex = result.source.index
+      const destinationIndex = result.destination.index
 
-    if (sourceIndex === destinationIndex) return
+      if (sourceIndex === destinationIndex) return
 
-    onMediaReorder(sourceIndex, destinationIndex)
-  }
+      onMediaReorder(sourceIndex, destinationIndex)
+    },
+    [onMediaReorder]
+  )
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <Droppable droppableId="media-list" direction="horizontal">
+      <Droppable droppableId="media" direction="horizontal">
         {(provided) => (
           <div
-            ref={provided.innerRef}
             {...provided.droppableProps}
-            className={cn(
-              "grid gap-4",
-              media.length === 1 && "grid-cols-1",
-              media.length === 2 && "grid-cols-2",
-              media.length >= 3 && "grid-cols-2 grid-rows-2",
-              media.length === 4 && "grid-cols-2",
-              className
-            )}
+            ref={provided.innerRef}
+            className={cn("flex flex-wrap gap-2", className)}
           >
             {media.map((item, index) => (
               <Draggable
-                key={item.url}
-                draggableId={item.url}
+                key={item.id}
+                draggableId={item.id}
                 index={index}
                 isDragDisabled={disabled}
               >
@@ -72,30 +72,24 @@ export function PostMedia({
                     {...provided.dragHandleProps}
                     className={cn(
                       "relative group",
-                      media.length === 3 && index === 0 && "col-span-2",
-                      snapshot.isDragging && "z-50"
+                      snapshot.isDragging && "opacity-50"
                     )}
                   >
                     <MediaFile
-                      src={item.url}
+                      url={item.url}
                       type={item.type}
+                      thumbnail={item.thumbnail}
                       aspectRatio={item.aspectRatio}
-                      className={cn(
-                        "rounded-lg border",
-                        snapshot.isDragging && "ring-2 ring-primary"
-                      )}
+                      className="w-24 h-24 rounded-lg object-cover"
                     />
                     {onMediaRemove && !disabled && (
                       <Button
                         variant="destructive"
-                        size="icon"
-                        className={cn(
-                          "absolute top-2 right-2 h-8 w-8",
-                          "opacity-0 group-hover:opacity-100 transition-opacity"
-                        )}
+                        size="icon-xs"
+                        className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => onMediaRemove(index)}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3 w-3" />
                       </Button>
                     )}
                   </div>

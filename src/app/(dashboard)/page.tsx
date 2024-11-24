@@ -5,15 +5,32 @@ import { redirect } from "next/navigation";
 import { useEffect } from "react";
 import { useUIStore } from "@/store/use-ui-store";
 import { useAnalyticsStore } from "@/store/use-analytics-store";
+import { useAccountStore } from "@/store/use-account-store";
+import { Card } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar } from "@/components/ui/avatar";
+import { LineChart, BarChart } from "@/components/charts";
 
 export default function DashboardPage() {
   const { userId } = auth();
   const { selectedPeriod, setSelectedPeriod } = useUIStore();
   const { analytics, isLoading, error, fetchAnalytics } = useAnalyticsStore();
+  const { accounts, selectedAccount, setSelectedAccount } = useAccountStore();
 
   useEffect(() => {
-    fetchAnalytics(selectedPeriod);
-  }, [selectedPeriod, fetchAnalytics]);
+    if (selectedAccount) {
+      fetchAnalytics(selectedPeriod, selectedAccount.id);
+    }
+  }, [selectedPeriod, selectedAccount, fetchAnalytics]);
+
+  useEffect(() => {
+    if (accounts.length && !selectedAccount) {
+      setSelectedAccount(accounts[0]);
+    }
+  }, [accounts, selectedAccount, setSelectedAccount]);
 
   if (!userId) {
     redirect("/sign-in");
@@ -28,108 +45,129 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-red-500 p-4 bg-red-50 rounded-md">
-        Error loading analytics: {error}
-      </div>
+      <Alert variant="destructive">
+        <AlertDescription>Error loading analytics: {error}</AlertDescription>
+      </Alert>
     );
   }
 
   return (
-    <div>
+    <div className="space-y-8">
       {/* Page Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <div className="mt-4 flex items-center space-x-4">
-          {periods.map((period) => (
-            <button
-              key={period.value}
-              onClick={() => setSelectedPeriod(period.value as any)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                selectedPeriod === period.value
-                  ? "bg-blue-500 text-white"
-                  : "bg-white text-gray-700 hover:bg-gray-50"
-              }`}
-            >
-              {period.label}
-            </button>
-          ))}
+      <div>
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <div className="mt-4 flex items-center justify-between">
+          <Tabs value={selectedPeriod} onValueChange={(value) => setSelectedPeriod(value as any)}>
+            <TabsList>
+              {periods.map((period) => (
+                <TabsTrigger key={period.value} value={period.value}>
+                  {period.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <Button>Export Report</Button>
         </div>
       </div>
 
+      {/* Account Selection */}
+      {accounts.length > 0 && (
+        <ScrollArea className="w-full whitespace-nowrap">
+          <div className="flex space-x-4 p-4">
+            {accounts.map((account) => (
+              <Button
+                key={account.id}
+                variant={selectedAccount?.id === account.id ? "default" : "outline"}
+                className="flex items-center space-x-2"
+                onClick={() => setSelectedAccount(account)}
+              >
+                <Avatar
+                  className="h-6 w-6"
+                  src={account.avatar_url}
+                  alt={account.username}
+                />
+                <span>{account.username}</span>
+              </Button>
+            ))}
+          </div>
+        </ScrollArea>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Quick Stats */}
-        <div className="bg-white p-6 rounded-lg shadow">
+        <Card className="p-6">
           <h2 className="text-lg font-semibold mb-4">Quick Stats</h2>
           <div className="space-y-4">
             <div>
-              <p className="text-gray-600">Total Posts</p>
+              <p className="text-muted-foreground">Total Posts</p>
               <p className="text-2xl font-bold">{analytics?.totalPosts || 0}</p>
-              <p className="text-sm text-green-600">↑ 12% from last period</p>
+              <p className="text-sm text-green-600">↑ {analytics?.postsGrowth || 0}% from last period</p>
             </div>
             <div>
-              <p className="text-gray-600">Engagement Rate</p>
+              <p className="text-muted-foreground">Engagement Rate</p>
               <p className="text-2xl font-bold">
                 {analytics?.engagementRate?.toFixed(1) || 0}%
               </p>
-              <p className="text-sm text-red-600">↓ 0.8% from last period</p>
+              <p className="text-sm text-red-600">↓ {analytics?.engagementGrowth || 0}% from last period</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Total Followers</p>
+              <p className="text-2xl font-bold">{analytics?.totalFollowers || 0}</p>
+              <p className="text-sm text-green-600">↑ {analytics?.followersGrowth || 0}% from last period</p>
             </div>
           </div>
-        </div>
+        </Card>
+
+        {/* Engagement Chart */}
+        <Card className="p-6 col-span-2">
+          <h2 className="text-lg font-semibold mb-4">Engagement Overview</h2>
+          <div className="h-[300px]">
+            <LineChart
+              data={analytics?.engagementData || []}
+              xField="date"
+              yField="value"
+              categories={["likes", "comments", "shares"]}
+            />
+          </div>
+        </Card>
+
+        {/* Post Performance */}
+        <Card className="p-6 col-span-2">
+          <h2 className="text-lg font-semibold mb-4">Post Performance</h2>
+          <div className="h-[300px]">
+            <BarChart
+              data={analytics?.postPerformance || []}
+              xField="date"
+              yField="value"
+              categories={["impressions", "reach", "engagement"]}
+            />
+          </div>
+        </Card>
 
         {/* Recent Activity */}
-        <div className="bg-white p-6 rounded-lg shadow">
+        <Card className="p-6">
           <h2 className="text-lg font-semibold mb-4">Recent Activity</h2>
           <div className="space-y-4">
-            {[
-              {
-                action: "Post Scheduled",
-                time: "2 hours ago",
-                description: "Marketing campaign for Q4",
-              },
-              {
-                action: "Analytics Updated",
-                time: "5 hours ago",
-                description: "Monthly performance report",
-              },
-              {
-                action: "Media Uploaded",
-                time: "1 day ago",
-                description: "New product images",
-              },
-            ].map((activity, index) => (
-              <div key={index} className="flex items-center">
-                <div className="flex-1">
-                  <p className="font-medium">{activity.action}</p>
-                  <p className="text-sm text-gray-600">{activity.time}</p>
-                  <p className="text-sm text-gray-500">{activity.description}</p>
+            {analytics?.recentActivity?.map((activity, index) => (
+              <div key={index} className="border-b pb-4 last:border-0">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium">{activity.action}</p>
+                    <p className="text-sm text-muted-foreground">{activity.description}</p>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{activity.time}</span>
                 </div>
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
-          <div className="space-y-4">
-            <button className="w-full px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors">
-              Create New Post
-            </button>
-            <button className="w-full px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
-              Schedule Content
-            </button>
-            <button className="w-full px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
-              View Analytics
-            </button>
-          </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

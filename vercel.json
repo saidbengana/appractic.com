@@ -4,9 +4,38 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/worker",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/collect-metrics",
+      "schedule": "0 */1 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/worker",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    },
+    {
+      "source": "/api/cron/collect-metrics",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    }
+  ],
   "regions": ["iad1"],
   "env": {
-    "NEXTAUTH_URL": "https://${VERCEL_URL}",
     "VERCEL_POSTGRES_PRISMA_URL": "${POSTGRES_PRISMA_URL}",
     "VERCEL_POSTGRES_URL_NON_POOLING": "${POSTGRES_URL_NON_POOLING}"
   }

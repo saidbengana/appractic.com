@@ -1,49 +1,33 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url = env("POSTGRES_PRISMA_URL") // uses connection pooling
-  directUrl = env("POSTGRES_URL_NON_POOLING") // uses a direct connection
-  shadowDatabaseUrl = env("POSTGRES_URL_NON_POOLING") // used for migrations
-}
-
-model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  accounts      Account[]
-  sessions      Session[]
-  posts         Post[]
-  socialAccounts SocialAccount[]
+  url = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Account {
-  id                String  @id @default(cuid())
+  id                String    @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?   @db.Text
+  access_token      String?   @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?   @db.Text
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts             Post[]    // Relation to posts
+  metrics           Metric[]  // Relation to metrics
+  audience          Audience[] // Relation to audience metrics
 
   @@unique([provider, providerAccountId])
 }
@@ -56,44 +40,88 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model SocialAccount {
-  id                String   @id @default(cuid())
-  userId            String
-  platform          String   // e.g., "twitter", "facebook", "instagram"
-  accessToken       String   @db.Text
-  refreshToken      String?  @db.Text
-  platformUsername  String
-  platformUserId    String
-  expiresAt         DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  posts             Post[]
-  
-  @@unique([platform, platformUserId])
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  posts         Post[]    // Relation to posts
+  tags          Tag[]     // Relation to tags
 }
 
 model Post {
-  id            String        @id @default(cuid())
-  content       String        @db.Text
-  mediaUrls     String[]     // Array of media URLs
-  scheduledFor  DateTime
-  publishedAt   DateTime?
-  status        PostStatus    @default(SCHEDULED)
-  platform      String        // e.g., "twitter", "facebook", "instagram"
-  userId        String
-  socialAccountId String
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  id              String      @id @default(cuid())
+  userId          String
+  accountId       String
+  status          Int         @default(0) // 0: draft, 1: scheduled, 2: published
+  scheduleStatus  Int         @default(0) // 0: pending, 1: processing, 2: processed
+  scheduledAt     DateTime?
+  publishedAt     DateTime?
+  content         Json?       // Store post content including text and media
+  errors          Json?       // Store any publishing errors
+  providerPostId  String?     // ID from the social media provider after publishing
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account         Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tags            Tag[]       // Many-to-many relation with tags
+  media           Media[]     // Many-to-many relation with media
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([status])
 }
 
-enum PostStatus {
-  DRAFT
-  SCHEDULED
-  PUBLISHED
-  FAILED
+model Tag {
+  id        String   @id @default(cuid())
+  name      String
+  hexColor  String   @db.Char(6)
+  userId    String
+  posts     Post[]   // Many-to-many relation with posts
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, userId])
+}
+
+model Media {
+  id          String   @id @default(cuid())
+  name        String
+  mimeType    String
+  disk        String   @default("local")
+  path        String
+  size        BigInt
+  sizeTotal   BigInt   // Including converted versions
+  conversions Json?    // Store converted versions info
+  posts       Post[]   // Many-to-many relation with posts
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Metric {
+  id        String   @id @default(cuid())
+  accountId String
+  data      Json     // Store various metrics (likes, shares, etc.)
+  date      DateTime
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, date])
+  @@index([accountId])
+  @@index([date])
+}
+
+model Audience {
+  id        String   @id @default(cuid())
+  accountId String
+  total     Int      @default(0)
+  date      DateTime
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, date])
+  @@index([accountId])
+  @@index([date])
 }

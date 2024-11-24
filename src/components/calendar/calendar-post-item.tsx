@@ -11,12 +11,10 @@ import { PostPreviewProviders } from '@/components/post/post-preview-providers'
 import { SecondaryButton } from '@/components/ui/button'
 import { ClockIcon } from '@/components/icons'
 import { useCalendarFilter } from '@/hooks/use-calendar-filter'
+import type { Post } from '@/app/(dashboard)/calendar/page'
 
 interface CalendarPostItemProps {
-  item: {
-    versions: any[]
-    accounts: any[]
-  }
+  item: Post
 }
 
 export function CalendarPostItem({ item }: CalendarPostItemProps) {
@@ -48,55 +46,56 @@ export function CalendarPostItem({ item }: CalendarPostItemProps) {
     return {
       excerpt: record.excerpt
     }
-  }, [item, filterAccounts])
+  }, [item, filterAccounts, getAccountVersion, getOriginalVersion])
+
+  const handlePreviewOpen = () => setIsPreviewOpen(true)
+  const handlePreviewClose = () => setIsPreviewOpen(false)
+
+  const uniqueAccounts = useMemo(() => uniqBy(item.accounts, 'id'), [item.accounts])
 
   return (
-    <>
-      <div
-        className="w-full relative flex rounded-md overflow-hidden border border-gray-200 hover:border-indigo-500 transition-colors ease-in-out duration-200 cursor-pointer"
-        onClick={() => setIsPreviewOpen(true)}
-      >
-        <div className="flex-1 p-3">
-          <div className="flex items-center space-x-1.5 mb-2">
-            <ClockIcon className="w-4 h-4 text-gray-400" />
-            <span className="text-sm text-gray-600">
-              {convertTime24to12(item.scheduled_at, timeFormat)}
-            </span>
-          </div>
-          
-          <div className="text-sm text-gray-900 line-clamp-2">
-            {content.excerpt}
-          </div>
+    <div className="group relative flex flex-col gap-2 rounded-lg border p-4 hover:bg-accent/5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1">
+          <div className="mb-1 text-sm font-medium">{item.title}</div>
+          <div className="text-xs text-muted-foreground">{content.excerpt}</div>
+        </div>
+        <PostStatus status={item.status} />
+      </div>
 
-          <div className="mt-2 flex items-center justify-between">
-            <div className="flex -space-x-1">
-              {uniqBy(item.accounts, 'provider').map((account) => (
-                <ProviderIcon
-                  key={account.id}
-                  provider={account.provider}
-                  className="w-6 h-6"
-                />
-              ))}
-            </div>
-            <PostStatus status={item.status} />
-          </div>
+      {item.scheduledAt && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <ClockIcon className="h-3 w-3" />
+          <span>{convertTime24to12(item.scheduledAt, timeFormat)}</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <div className="flex -space-x-2">
+          {uniqueAccounts.map((account) => (
+            <ProviderIcon
+              key={account.id}
+              provider={account.provider}
+              className="h-6 w-6 rounded-full border-2 border-background"
+            />
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <SecondaryButton size="xs" onClick={handlePreviewOpen}>
+            Preview
+          </SecondaryButton>
+          <PostItemActions post={item} />
         </div>
       </div>
 
       <DialogModal
         isOpen={isPreviewOpen}
-        onClose={() => setIsPreviewOpen(false)}
+        onClose={handlePreviewClose}
         title="Post Preview"
       >
-        <div className="space-y-4">
-          <PostPreviewProviders post={item} />
-          <div className="flex justify-end">
-            <SecondaryButton onClick={() => setIsPreviewOpen(false)}>
-              Close
-            </SecondaryButton>
-          </div>
-        </div>
+        <PostPreviewProviders post={item} />
       </DialogModal>
-    </>
+    </div>
   )
 }
