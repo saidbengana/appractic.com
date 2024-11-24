@@ -4,9 +4,6 @@ const nextConfig = {
   compress: true,
   images: {
     domains: ['appractic.com'],
-  },
-  experimental: {
-    serverActions: true,
   }
 };
 
