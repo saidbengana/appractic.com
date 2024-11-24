@@ -1,15 +1,20 @@
 'use client'
 
-import { signIn } from 'next-auth/react'
+import { useSignIn } from '@clerk/nextjs'
 import { useState } from 'react'
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
+  const { signIn } = useSignIn()
 
   const handleGithubLogin = async () => {
     setIsLoading(true)
     try {
-      await signIn('github', { callbackUrl: '/dashboard' })
+      await signIn.authenticateWithRedirect({
+        strategy: "oauth_github",
+        redirectUrl: "/dashboard",
+        redirectUrlComplete: "/dashboard"
+      })
     } catch (error) {
       console.error('Login error:', error)
     } finally {
