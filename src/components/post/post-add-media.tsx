@@ -15,29 +15,24 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Image, Video, Upload } from "lucide-react"
-
-interface PostMediaItem {
-  id: string
-  url: string
-  type: "image" | "video"
-  thumbnail?: string
-  aspectRatio?: number
-}
+import { MediaType, PostMedia } from '@/types/schema'
 
 interface PostAddMediaProps {
-  onMediaAdd: (media: PostMediaItem) => void
+  media: PostMedia[]
+  onChange: (newMedia: PostMedia[]) => void
   disabled?: boolean
   className?: string
 }
 
 export function PostAddMedia({
-  onMediaAdd,
+  media,
+  onChange,
   disabled = false,
   className,
 }: PostAddMediaProps) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [url, setUrl] = React.useState("")
-  const [type, setType] = React.useState<"image" | "video">("image")
+  const [type, setType] = React.useState<MediaType>("IMAGE")
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -49,27 +44,28 @@ export function PostAddMedia({
     setError(null)
 
     try {
-      // Here you would typically validate the URL and maybe process the media
-      // For now, we'll just create a media item with the URL
-      const mediaItem: PostMediaItem = {
+      const mediaItem: PostMedia = {
         id: crypto.randomUUID(),
+        postId: '', // This will be set when the post is created
         url,
         type,
         // You might want to fetch these values
-        thumbnail: type === "video" ? undefined : url,
+        thumbnail: type === "VIDEO" ? undefined : url,
         aspectRatio: undefined,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }
 
-      onMediaAdd(mediaItem)
+      onChange([...media, mediaItem])
       setIsOpen(false)
       setUrl("")
-      setType("image")
+      setType("IMAGE")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add media")
     } finally {
       setLoading(false)
     }
-  }, [url, type, onMediaAdd])
+  }, [url, type, media, onChange])
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -101,9 +97,9 @@ export function PostAddMedia({
             <div className="flex gap-2">
               <Button
                 type="button"
-                variant={type === "image" ? "default" : "outline"}
+                variant={type === "IMAGE" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setType("image")}
+                onClick={() => setType("IMAGE")}
                 className="flex items-center gap-2"
               >
                 <Image className="h-4 w-4" />
@@ -111,9 +107,9 @@ export function PostAddMedia({
               </Button>
               <Button
                 type="button"
-                variant={type === "video" ? "default" : "outline"}
+                variant={type === "VIDEO" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setType("video")}
+                onClick={() => setType("VIDEO")}
                 className="flex items-center gap-2"
               >
                 <Video className="h-4 w-4" />
@@ -125,7 +121,7 @@ export function PostAddMedia({
             <Label htmlFor="url">URL</Label>
             <Input
               id="url"
-              placeholder={`Enter ${type} URL`}
+              placeholder={`Enter ${type === "IMAGE" ? 'image' : 'video'} URL`}
               value={url}
               onChange={(e) => setUrl(e.target.value)}
             />

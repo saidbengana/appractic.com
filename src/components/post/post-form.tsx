@@ -26,7 +26,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { usePosts } from '@/hooks/use-posts'
-import { PostMedia } from '@/types/schema'
+import { PostMedia, UpdatePostRequest, CreatePostRequest } from '@/types/schema'
 import { PostAddMedia } from './post-add-media'
 import { ScheduleForm } from './schedule-form'
 import { ScheduleConfig } from '@/types/schedule'
@@ -71,20 +71,35 @@ export function PostForm({ onSuccess, initialData }: PostFormProps) {
   const onSubmit = useCallback(async (data: FormData) => {
     try {
       setIsSubmitting(true)
-      const postData = {
-        ...data,
-        media: media.map(m => ({
-          url: m.url,
-          type: m.type,
-          thumbnail: m.thumbnail,
-          aspectRatio: m.aspectRatio,
-        })),
-      }
+      const createMediaData = media.map(m => ({
+        url: m.url,
+        type: m.type,
+        thumbnail: m.thumbnail || undefined,
+        aspectRatio: m.aspectRatio || undefined,
+      }))
+
+      const updateMediaData = media.map(m => ({
+        url: m.url,
+        type: m.type,
+        thumbnail: m.thumbnail,
+        aspectRatio: m.aspectRatio,
+      }))
 
       if (initialData?.id) {
-        await updatePost(initialData.id, postData)
+        const updateData: UpdatePostRequest = {
+          ...data,
+          scheduledAt: data.scheduledAt ? data.scheduledAt.toISOString() : null,
+          media: updateMediaData,
+        }
+        await updatePost(initialData.id, updateData)
       } else {
-        await createPost(postData)
+        const createData: CreatePostRequest = {
+          ...data,
+          content: data.content || '', // Ensure content is never undefined for create
+          scheduledAt: data.scheduledAt?.toISOString(), // undefined if no date is set
+          media: createMediaData,
+        }
+        await createPost(createData)
       }
 
       form.reset()

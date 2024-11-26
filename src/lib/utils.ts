@@ -70,3 +70,11 @@ export function bytesToSize(bytes: number) {
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
   return Math.round(bytes / Math.pow(1024, i)) + ' ' + sizes[i]
 }
+
+export function convertTime24to12(time24: string): string {
+  const [hours24, minutes] = time24.split(':')
+  const hours = parseInt(hours24, 10)
+  const period = hours >= 12 ? 'PM' : 'AM'
+  const hours12 = hours % 12 || 12
+  return `${hours12}:${minutes} ${period}`
+}

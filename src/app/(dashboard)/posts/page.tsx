@@ -61,11 +61,10 @@ export default function PostsPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <CardTitle className="text-base">
-                            {post.content.slice(0, 100)}
-                            {post.content.length > 100 ? '...' : ''}
+                            {post.title}
                           </CardTitle>
                           <CardDescription>
-                            {format(new Date(post.created_at), 'PPP')}
+                            {format(new Date(post.createdAt), 'PPP')}
                           </CardDescription>
                         </div>
                         <div className="flex items-center gap-2">
@@ -83,22 +82,20 @@ export default function PostsPage() {
                         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
                           {post.media.map((item, index) => (
                             <div
-                              key={index}
+                              key={item.id}
                               className="aspect-video overflow-hidden rounded-lg bg-muted"
                             >
-                              {item.mime_type?.startsWith('image/') ? (
+                              {item.type === 'image' ? (
                                 <img
                                   src={item.url}
-                                  alt=""
+                                  alt={item.alt || ""}
                                   className="h-full w-full object-cover"
                                 />
                               ) : (
                                 <video
                                   src={item.url}
                                   className="h-full w-full object-cover"
-                                  muted
-                                  loop
-                                  playsInline
+                                  controls
                                 />
                               )}
                             </div>

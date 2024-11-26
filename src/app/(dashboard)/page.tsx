@@ -1,174 +1,104 @@
 "use client";
 
-import { auth } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 import { useEffect } from "react";
 import { useUIStore } from "@/store/use-ui-store";
-import { useAnalyticsStore } from "@/store/use-analytics-store";
-import { useAccountStore } from "@/store/use-account-store";
-import { Card } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useAnalytics } from "@/hooks/use-analytics";
+import { usePostVersions } from "@/hooks/use-post-versions";
+import { BarChart } from "@/components/charts/bar-chart";
+import { LineChart } from "@/components/charts/line-chart";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar } from "@/components/ui/avatar";
-import { LineChart, BarChart } from "@/components/charts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-export default function DashboardPage() {
-  const { userId } = auth();
-  const { selectedPeriod, setSelectedPeriod } = useUIStore();
-  const { analytics, isLoading, error, fetchAnalytics } = useAnalyticsStore();
-  const { accounts, selectedAccount, setSelectedAccount } = useAccountStore();
+const queryClient = new QueryClient();
 
-  useEffect(() => {
-    if (selectedAccount) {
-      fetchAnalytics(selectedPeriod, selectedAccount.id);
-    }
-  }, [selectedPeriod, selectedAccount, fetchAnalytics]);
+function DashboardContent() {
+  const { isSignedIn, user } = useUser();
+  const { data: analytics } = useAnalytics();
+  const { data: versions } = usePostVersions();
+  const { setTitle } = useUIStore();
 
   useEffect(() => {
-    if (accounts.length && !selectedAccount) {
-      setSelectedAccount(accounts[0]);
-    }
-  }, [accounts, selectedAccount, setSelectedAccount]);
+    setTitle("Dashboard");
+  }, [setTitle]);
 
-  if (!userId) {
+  if (!isSignedIn) {
     redirect("/sign-in");
   }
 
-  const periods = [
-    { label: "Last 7 days", value: "7_days" },
-    { label: "Last 30 days", value: "30_days" },
-    { label: "Last 90 days", value: "90_days" },
-  ];
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>Error loading analytics: {error}</AlertDescription>
-      </Alert>
-    );
-  }
-
   return (
-    <div className="space-y-8">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <div className="mt-4 flex items-center justify-between">
-          <Tabs value={selectedPeriod} onValueChange={(value) => setSelectedPeriod(value as any)}>
-            <TabsList>
-              {periods.map((period) => (
-                <TabsTrigger key={period.value} value={period.value}>
-                  {period.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-          <Button>Export Report</Button>
-        </div>
-      </div>
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Analytics Cards */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Total Posts</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{analytics?.totalPosts || 0}</div>
+        </CardContent>
+      </Card>
+      
+      {/* Charts */}
+      <Card className="col-span-4">
+        <CardHeader>
+          <CardTitle>Post Performance</CardTitle>
+        </CardHeader>
+        <CardContent className="pl-2">
+          <BarChart data={analytics?.postPerformance || []} />
+        </CardContent>
+      </Card>
 
-      {/* Account Selection */}
-      {accounts.length > 0 && (
-        <ScrollArea className="w-full whitespace-nowrap">
-          <div className="flex space-x-4 p-4">
-            {accounts.map((account) => (
-              <Button
-                key={account.id}
-                variant={selectedAccount?.id === account.id ? "default" : "outline"}
-                className="flex items-center space-x-2"
-                onClick={() => setSelectedAccount(account)}
-              >
-                <Avatar
-                  className="h-6 w-6"
-                  src={account.avatar_url}
-                  alt={account.username}
-                />
-                <span>{account.username}</span>
-              </Button>
-            ))}
-          </div>
-        </ScrollArea>
-      )}
+      <Card className="col-span-4">
+        <CardHeader>
+          <CardTitle>Engagement Over Time</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <LineChart data={analytics?.engagementOverTime || []} />
+        </CardContent>
+      </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Quick Stats */}
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4">Quick Stats</h2>
-          <div className="space-y-4">
-            <div>
-              <p className="text-muted-foreground">Total Posts</p>
-              <p className="text-2xl font-bold">{analytics?.totalPosts || 0}</p>
-              <p className="text-sm text-green-600">↑ {analytics?.postsGrowth || 0}% from last period</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Engagement Rate</p>
-              <p className="text-2xl font-bold">
-                {analytics?.engagementRate?.toFixed(1) || 0}%
-              </p>
-              <p className="text-sm text-red-600">↓ {analytics?.engagementGrowth || 0}% from last period</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Total Followers</p>
-              <p className="text-2xl font-bold">{analytics?.totalFollowers || 0}</p>
-              <p className="text-sm text-green-600">↑ {analytics?.followersGrowth || 0}% from last period</p>
-            </div>
-          </div>
-        </Card>
-
-        {/* Engagement Chart */}
-        <Card className="p-6 col-span-2">
-          <h2 className="text-lg font-semibold mb-4">Engagement Overview</h2>
-          <div className="h-[300px]">
-            <LineChart
-              data={analytics?.engagementData || []}
-              xField="date"
-              yField="value"
-              categories={["likes", "comments", "shares"]}
-            />
-          </div>
-        </Card>
-
-        {/* Post Performance */}
-        <Card className="p-6 col-span-2">
-          <h2 className="text-lg font-semibold mb-4">Post Performance</h2>
-          <div className="h-[300px]">
-            <BarChart
-              data={analytics?.postPerformance || []}
-              xField="date"
-              yField="value"
-              categories={["impressions", "reach", "engagement"]}
-            />
-          </div>
-        </Card>
-
-        {/* Recent Activity */}
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4">Recent Activity</h2>
-          <div className="space-y-4">
-            {analytics?.recentActivity?.map((activity, index) => (
-              <div key={index} className="border-b pb-4 last:border-0">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-medium">{activity.action}</p>
-                    <p className="text-sm text-muted-foreground">{activity.description}</p>
+      {/* Recent Activity */}
+      <Card className="col-span-4">
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="h-[400px]">
+            <div className="space-y-8">
+              {analytics?.recentActivity?.map((activity, index) => (
+                <div key={index} className="flex items-center">
+                  <Avatar className="h-9 w-9">
+                    <AvatarImage src={activity.userImage} alt="User" />
+                    <AvatarFallback>UN</AvatarFallback>
+                  </Avatar>
+                  <div className="ml-4 space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {activity.userName}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {activity.action}
+                    </p>
                   </div>
-                  <span className="text-xs text-muted-foreground">{activity.time}</span>
+                  <div className="ml-auto font-medium">
+                    {activity.metric}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <DashboardContent />
+    </QueryClientProvider>
   );
 }

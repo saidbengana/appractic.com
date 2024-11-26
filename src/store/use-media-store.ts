@@ -12,6 +12,12 @@ export interface MediaItem {
   metadata?: Record<string, any>
 }
 
+interface ExternalMediaItem {
+  id: string
+  url: string
+  downloadData?: Record<string, any>
+}
+
 interface TenorSearchResult {
   id: string
   title: string
@@ -25,6 +31,7 @@ interface MediaState {
   items: MediaItem[]
   searchResults: MediaItem[]
   isLoading: boolean
+  isDownloading: boolean
   error: string | null
   searchQuery: string
   // Actions
@@ -32,11 +39,13 @@ interface MediaState {
   addItem: (item: MediaItem) => void
   removeItem: (id: string) => void
   setLoading: (loading: boolean) => void
+  setDownloading: (downloading: boolean) => void
   setError: (error: string | null) => void
   setSearchQuery: (query: string) => void
   setSearchResults: (results: MediaItem[]) => void
   searchTenor: (query: string) => Promise<void>
   uploadMedia: (file: File) => Promise<void>
+  downloadExternalMedia: (items: ExternalMediaItem[]) => Promise<MediaItem[]>
 }
 
 const TENOR_API_KEY = process.env.NEXT_PUBLIC_TENOR_API_KEY || 'YOUR_TENOR_API_KEY'
@@ -47,16 +56,17 @@ export const useMediaStore = create<MediaState>()(
     items: [],
     searchResults: [],
     isLoading: false,
+    isDownloading: false,
     error: null,
     searchQuery: '',
 
     setItems: (items) => set({ items }),
     addItem: (item) => set((state) => ({ items: [...state.items, item] })),
-    removeItem: (id) =>
-      set((state) => ({
-        items: state.items.filter((item) => item.id !== id),
-      })),
+    removeItem: (id) => set((state) => ({
+      items: state.items.filter((item) => item.id !== id)
+    })),
     setLoading: (loading) => set({ isLoading: loading }),
+    setDownloading: (downloading) => set({ isDownloading: downloading }),
     setError: (error) => set({ error }),
     setSearchQuery: (query) => set({ searchQuery: query }),
     setSearchResults: (results) => set({ searchResults: results }),
@@ -64,20 +74,22 @@ export const useMediaStore = create<MediaState>()(
     searchTenor: async (query: string) => {
       const state = get()
       if (!query.trim()) {
-        set({ searchResults: [] })
+        state.setSearchResults([])
         return
       }
 
-      set({ isLoading: true, error: null })
+      state.setLoading(true)
+      state.setError(null)
+
       try {
         const response = await fetch(
           `${TENOR_API_BASE}/search?q=${encodeURIComponent(
             query
-          )}&key=${TENOR_API_KEY}&client_key=appractic&limit=20`
+          )}&key=${TENOR_API_KEY}&client_key=my_test_app&limit=20`
         )
-        
+
         if (!response.ok) {
-          throw new Error('Failed to fetch from Tenor')
+          throw new Error('Failed to fetch GIFs')
         }
 
         const data = await response.json()
@@ -89,52 +101,78 @@ export const useMediaStore = create<MediaState>()(
           title: result.title,
           source: 'tenor',
           createdAt: new Date(),
+          metadata: {
+            formats: result.media_formats
+          }
         }))
 
-        set({ searchResults: results, isLoading: false })
+        state.setSearchResults(results)
       } catch (error) {
-        set({
-          error: (error as Error).message,
-          isLoading: false,
-        })
+        state.setError(error instanceof Error ? error.message : 'Failed to search GIFs')
+      } finally {
+        state.setLoading(false)
       }
     },
 
     uploadMedia: async (file: File) => {
-      set({ isLoading: true, error: null })
+      const state = get()
+      state.setLoading(true)
+      state.setError(null)
+
       try {
-        // TODO: Implement actual file upload logic
-        const formData = new FormData()
-        formData.append('file', file)
-
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to upload file')
-        }
-
-        const data = await response.json()
+        // Here you would typically upload to your server or cloud storage
+        // For now, we'll create a local URL
+        const url = URL.createObjectURL(file)
+        
         const newItem: MediaItem = {
-          id: data.id,
+          id: Math.random().toString(36).substring(7),
           type: file.type.startsWith('image/') ? 'image' : 'video',
-          url: data.url,
+          url,
           source: 'upload',
           createdAt: new Date(),
+          metadata: {
+            size: file.size,
+            type: file.type
+          }
         }
 
-        set((state) => ({
-          items: [...state.items, newItem],
-          isLoading: false,
-        }))
+        state.addItem(newItem)
+        return newItem
       } catch (error) {
-        set({
-          error: (error as Error).message,
-          isLoading: false,
-        })
+        state.setError(error instanceof Error ? error.message : 'Failed to upload media')
+        throw error
+      } finally {
+        state.setLoading(false)
       }
     },
+
+    downloadExternalMedia: async (items: ExternalMediaItem[]) => {
+      const state = get()
+      state.setDownloading(true)
+      state.setError(null)
+
+      try {
+        // Here you would typically download the external media to your server
+        // For now, we'll just create MediaItems from the external items
+        const downloadedItems: MediaItem[] = items.map(item => ({
+          id: item.id,
+          type: 'image', // You might want to determine this from the URL or metadata
+          url: item.url,
+          source: 'upload',
+          createdAt: new Date(),
+          metadata: item.downloadData
+        }))
+
+        // Add the downloaded items to the store
+        downloadedItems.forEach(item => state.addItem(item))
+        
+        return downloadedItems
+      } catch (error) {
+        state.setError(error instanceof Error ? error.message : 'Failed to download media')
+        throw error
+      } finally {
+        state.setDownloading(false)
+      }
+    }
   }))
 )

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs';
-import { db } from '@/lib/db';
+import { auth } from '@clerk/nextjs/server';
+import { supabase } from '@/lib/db';
 import { subDays, startOfDay, endOfDay } from 'date-fns';
 
 export async function GET(request: Request) {
@@ -21,45 +21,45 @@ export async function GET(request: Request) {
       );
     }
 
+    // First verify the account belongs to the user
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('id')
+      .eq('id', accountId)
+      .eq('user_id', userId)
+      .single();
+
+    if (accountError || !account) {
+      return NextResponse.json(
+        { error: 'Account not found' },
+        { status: 404 }
+      );
+    }
+
     const startDate = startOfDay(subDays(new Date(), days));
     const endDate = endOfDay(new Date());
 
-    // Get metrics data
-    const metrics = await db.metric.findMany({
-      where: {
-        accountId,
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      orderBy: {
-        date: 'asc',
-      },
-    });
+    const { data: metrics, error: metricsError } = await supabase
+      .from('account_metrics')
+      .select('*')
+      .eq('account_id', accountId)
+      .gte('date', startDate.toISOString())
+      .lte('date', endDate.toISOString())
+      .order('date', { ascending: true });
 
-    // Get audience data
-    const audience = await db.audience.findMany({
-      where: {
-        accountId,
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      orderBy: {
-        date: 'asc',
-      },
-    });
+    if (metricsError) {
+      console.error('Error fetching metrics:', metricsError);
+      return NextResponse.json(
+        { error: 'Failed to fetch metrics' },
+        { status: 500 }
+      );
+    }
 
-    return NextResponse.json({
-      metrics,
-      audience,
-    });
+    return NextResponse.json(metrics);
   } catch (error) {
-    console.error('Error fetching metrics:', error);
+    console.error('Error in GET /api/metrics:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch metrics' },
+      { error: 'Internal Server Error' },
       { status: 500 }
     );
   }
@@ -68,63 +68,51 @@ export async function GET(request: Request) {
 // Update metrics (called by cron job)
 export async function POST(request: Request) {
   try {
-    const { authorization } = request.headers;
+    const authorization = request.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
 
     if (!cronSecret || authorization !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
-    const accounts = await db.account.findMany({
-      select: {
-        id: true,
-        provider: true,
-        access_token: true,
-      },
-    });
+    const { accountId, metrics } = await request.json();
 
-    const date = new Date();
-    const metrics = [];
-    const audience = [];
-
-    for (const account of accounts) {
-      try {
-        // Fetch metrics from social media providers
-        // This will be implemented with provider-specific logic
-        const providerMetrics = { likes: 0, shares: 0, comments: 0 };
-        const providerAudience = { total: 0 };
-
-        metrics.push(
-          db.metric.create({
-            data: {
-              accountId: account.id,
-              date,
-              data: providerMetrics,
-            },
-          })
-        );
-
-        audience.push(
-          db.audience.create({
-            data: {
-              accountId: account.id,
-              date,
-              total: providerAudience.total,
-            },
-          })
-        );
-      } catch (error) {
-        console.error(`Error fetching metrics for account ${account.id}:`, error);
-      }
+    if (!accountId || !metrics) {
+      return NextResponse.json(
+        { error: 'Account ID and metrics are required' },
+        { status: 400 }
+      );
     }
 
-    await Promise.all([...metrics, ...audience]);
+    const { error } = await supabase
+      .from('account_metrics')
+      .insert({
+        account_id: accountId,
+        date: new Date().toISOString(),
+        followers: metrics.followers,
+        following: metrics.following,
+        posts: metrics.posts,
+        engagement_rate: metrics.engagementRate,
+        reach: metrics.reach,
+        impressions: metrics.impressions,
+      });
+
+    if (error) {
+      console.error('Error updating metrics:', error);
+      return NextResponse.json(
+        { error: 'Failed to update metrics' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ message: 'Metrics updated successfully' });
   } catch (error) {
-    console.error('Error updating metrics:', error);
+    console.error('Error in POST /api/metrics:', error);
     return NextResponse.json(
-      { error: 'Failed to update metrics' },
+      { error: 'Internal Server Error' },
       { status: 500 }
     );
   }

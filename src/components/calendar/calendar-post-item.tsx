@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { uniqBy } from 'lodash'
-import { convertTime24to12 } from '@/lib/utils'
 import { useSettings } from '@/hooks/use-settings'
 import { usePostVersions } from '@/hooks/use-post-versions'
 import { ProviderIcon } from '@/components/account/provider-icon'
@@ -8,10 +7,15 @@ import { PostStatus } from '@/components/post/post-status'
 import { DialogModal } from '@/components/ui/dialog-modal'
 import { PostItemActions } from '@/components/post/post-item-actions'
 import { PostPreviewProviders } from '@/components/post/post-preview-providers'
-import { SecondaryButton } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { ClockIcon } from '@/components/icons'
 import { useCalendarFilter } from '@/hooks/use-calendar-filter'
-import type { Post } from '@/app/(dashboard)/calendar/page'
+import type { Post, PostMedia } from '@/store/use-posts-store'
+
+interface PostContent {
+  text: string
+  media: PostMedia[]
+}
 
 interface CalendarPostItemProps {
   item: Post
@@ -24,77 +28,109 @@ export function CalendarPostItem({ item }: CalendarPostItemProps) {
   const { accounts: filterAccounts } = useCalendarFilter()
 
   const content = useMemo(() => {
-    if (!item.versions.length) {
+    if (!item.versions?.length) {
       return {
         excerpt: '',
       }
     }
 
-    let accounts = item.accounts
+    let accounts = item.accounts || []
 
     if (filterAccounts.length) {
       accounts = accounts.filter(account => filterAccounts.includes(account.id))
     }
 
     const accountVersions = accounts.map((account) => {
-      const accountVersion = getAccountVersion(item.versions, account.id)
-      return accountVersion ? accountVersion.content[0] : getOriginalVersion(item.versions).content[0]
+      const accountVersion = getAccountVersion(item.id, account.id)
+      const originalVersion = getOriginalVersion(item.id)
+      return accountVersion?.content || originalVersion?.content || { text: '', media: [] }
     })
 
-    const record = accountVersions.length ? accountVersions[0] : item.versions[0].content[0]
+    const record = accountVersions.length ? accountVersions[0] : item.versions[0].content
 
     return {
-      excerpt: record.excerpt
+      excerpt: typeof record === 'string' ? record : record.text || ''
     }
   }, [item, filterAccounts, getAccountVersion, getOriginalVersion])
 
   const handlePreviewOpen = () => setIsPreviewOpen(true)
-  const handlePreviewClose = () => setIsPreviewOpen(false)
 
-  const uniqueAccounts = useMemo(() => uniqBy(item.accounts, 'id'), [item.accounts])
+  const formattedTime = useMemo(() => {
+    if (!item.scheduledAt) return ''
+    const time = new Date(item.scheduledAt).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: timeFormat === '12'
+    })
+    return time
+  }, [item.scheduledAt, timeFormat])
 
   return (
-    <div className="group relative flex flex-col gap-2 rounded-lg border p-4 hover:bg-accent/5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
-          <div className="mb-1 text-sm font-medium">{item.title}</div>
-          <div className="text-xs text-muted-foreground">{content.excerpt}</div>
-        </div>
-        <PostStatus status={item.status} />
-      </div>
-
-      {item.scheduledAt && (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <ClockIcon className="h-3 w-3" />
-          <span>{convertTime24to12(item.scheduledAt, timeFormat)}</span>
-        </div>
-      )}
-
-      <div className="flex items-center justify-between">
-        <div className="flex -space-x-2">
-          {uniqueAccounts.map((account) => (
-            <ProviderIcon
-              key={account.id}
-              provider={account.provider}
-              className="h-6 w-6 rounded-full border-2 border-background"
-            />
-          ))}
+    <div className="group relative flex flex-col gap-2 rounded-lg border p-3 hover:bg-muted/50">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <PostStatus status={item.status} />
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <ClockIcon className="h-3 w-3" />
+              {formattedTime}
+            </span>
+          </div>
+          <p className="text-sm">{content.excerpt}</p>
         </div>
 
         <div className="flex items-center gap-2">
-          <SecondaryButton size="xs" onClick={handlePreviewOpen}>
+          <Button size="sm" onClick={handlePreviewOpen}>
             Preview
-          </SecondaryButton>
-          <PostItemActions post={item} />
+          </Button>
+          <PostItemActions postId={item.id} />
         </div>
       </div>
 
       <DialogModal
-        isOpen={isPreviewOpen}
-        onClose={handlePreviewClose}
         title="Post Preview"
+        description="Preview how your post will look on different platforms"
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
       >
-        <PostPreviewProviders post={item} />
+        <div className="mt-4">
+          {item.accounts?.map((account) => {
+            const accountVersion = getAccountVersion(item.id, account.id)
+            const originalVersion = getOriginalVersion(item.id)
+            const versionContent = accountVersion?.content || originalVersion?.content || { text: '', media: [] }
+            const content = typeof versionContent === 'string' 
+              ? { text: versionContent, media: [] as PostMedia[] } 
+              : versionContent as PostContent
+
+            return (
+              <div key={account.id} className="mb-4 last:mb-0">
+                <div className="mb-2 flex items-center gap-2">
+                  <ProviderIcon provider={account.platform} />
+                  <span className="text-sm font-medium">{account.username}</span>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="whitespace-pre-wrap text-sm">{content.text}</p>
+                  {content.media?.length > 0 && (
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      {content.media.map((media) => (
+                        <div
+                          key={media.id}
+                          className="relative aspect-square overflow-hidden rounded-lg"
+                        >
+                          <img
+                            src={media.url}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </DialogModal>
     </div>
   )

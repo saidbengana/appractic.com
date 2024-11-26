@@ -1,5 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs';
+import { getAuth } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+import { type NextRequest } from "next/server";
+import { db } from "@/lib/db";
+import { posts } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { v4 as uuidv4 } from "uuid";
 import { supabase } from '@/lib/supabase';
 import { Post } from '@/types/supabase';
 
@@ -12,11 +17,11 @@ interface PostData {
   tags?: string[]
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { userId } = auth();
+    const { userId } = getAuth(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
     const { data: posts, error } = await supabase
@@ -43,19 +48,16 @@ export async function GET() {
 
     return NextResponse.json(posts);
   } catch (error) {
-    console.error('Error fetching posts:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch posts' },
-      { status: 500 }
-    );
+    console.error("[POSTS_GET]", error);
+    return new NextResponse("Internal Error", { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = auth();
+    const { userId } = getAuth(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
     const data: PostData = await request.json();
@@ -77,8 +79,9 @@ export async function POST(request: NextRequest) {
     if (error) throw error;
 
     // If there are tags, add them
-    if (data.tags?.length > 0) {
-      const postTags = data.tags.map((tagId: string) => ({
+    const tags = data.tags || [];
+    if (tags.length > 0) {
+      const postTags = tags.map((tagId: string) => ({
         post_id: newPost.id,
         tag_id: tagId,
       }));
@@ -87,24 +90,27 @@ export async function POST(request: NextRequest) {
         .from('post_tags')
         .insert(postTags);
 
-      if (tagError) throw tagError;
+      if (tagError) {
+        console.error('Error adding post tags:', tagError);
+        return NextResponse.json(
+          { error: 'Error adding post tags' },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json(newPost);
   } catch (error) {
-    console.error('Error creating post:', error);
-    return NextResponse.json(
-      { error: 'Failed to create post' },
-      { status: 500 }
-    );
+    console.error("[POSTS_POST]", error);
+    return new NextResponse("Internal Error", { status: 500 });
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    const { userId } = auth();
+    const { userId } = getAuth(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
     const data: PostData & { id: string } = await request.json();
@@ -151,8 +157,9 @@ export async function PUT(request: NextRequest) {
         .eq('post_id', postId);
 
       // Add new tags
-      if (data.tags.length > 0) {
-        const postTags = data.tags.map((tagId: string) => ({
+      const tags = data.tags || [];
+      if (tags.length > 0) {
+        const postTags = tags.map((tagId: string) => ({
           post_id: postId,
           tag_id: tagId,
         }));
@@ -161,25 +168,28 @@ export async function PUT(request: NextRequest) {
           .from('post_tags')
           .insert(postTags);
 
-        if (tagError) throw tagError;
+        if (tagError) {
+          console.error('Error adding post tags:', tagError);
+          return NextResponse.json(
+            { error: 'Error adding post tags' },
+            { status: 500 }
+          );
+        }
       }
     }
 
     return NextResponse.json(updatedPost);
   } catch (error) {
-    console.error('Error updating post:', error);
-    return NextResponse.json(
-      { error: 'Failed to update post' },
-      { status: 500 }
-    );
+    console.error("[POSTS_PUT]", error);
+    return new NextResponse("Internal Error", { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = auth();
+    const { userId } = getAuth(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -216,10 +226,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting post:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete post' },
-      { status: 500 }
-    );
+    console.error("[POSTS_DELETE]", error);
+    return new NextResponse("Internal Error", { status: 500 });
   }
 }

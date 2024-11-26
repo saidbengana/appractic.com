@@ -102,7 +102,7 @@ export default function ServicesPage() {
               Unsplash
             </TabsTrigger>
             <TabsTrigger value="tenor" className="flex items-center gap-2">
-              <Icons.gif className="h-4 w-4" />
+              <Icons.tenor className="h-4 w-4" />
               Tenor
             </TabsTrigger>
           </TabsList>

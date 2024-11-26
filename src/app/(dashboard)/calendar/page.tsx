@@ -3,38 +3,11 @@
 import { useState, useCallback } from 'react'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, subWeeks, addMonths, subMonths, startOfMonth, endOfMonth } from 'date-fns'
 import { useSettingsStore } from '@/store/use-settings-store'
-import { usePostsStore } from '@/store/use-posts-store'
+import { usePostsStore, Post } from '@/store/use-posts-store'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-
-export interface Post {
-  id: string
-  title: string
-  content: string
-  scheduledAt?: string
-  status: 'draft' | 'scheduled' | 'published'
-  versions: PostVersion[]
-  accounts: PostAccount[]
-}
-
-interface PostVersion {
-  id: string
-  content: PostContent[]
-  accountId?: string
-}
-
-interface PostContent {
-  excerpt: string
-  text: string
-}
-
-interface PostAccount {
-  id: string
-  provider: string
-  name: string
-}
 
 interface CalendarDay {
   date: Date
@@ -45,98 +18,106 @@ interface CalendarDay {
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<'month' | 'week'>('month')
-  const { weekStartDay } = useSettingsStore()
+  const { settings } = useSettingsStore()
   const { posts } = usePostsStore()
 
+  // Ensure weekStartsOn is a valid day number (0-6)
+  const weekStartsOn = Math.min(Math.max(parseInt(settings.weekStartsOn), 0), 6) as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
   const getPostsForDate = useCallback((date: Date) => {
-    return posts.filter((post: Post) => {
+    return posts.filter((post) => {
       if (!post.scheduledAt) return false
-      return format(new Date(post.scheduledAt), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
+      return format(post.scheduledAt, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
     })
   }, [posts])
 
   const handlePrevious = useCallback(() => {
     if (view === 'month') {
-      setCurrentDate(prev => subMonths(prev, 1))
+      setCurrentDate(subMonths(currentDate, 1))
     } else {
-      setCurrentDate(prev => subWeeks(prev, 1))
+      setCurrentDate(subWeeks(currentDate, 1))
     }
-  }, [view])
+  }, [currentDate, view])
 
   const handleNext = useCallback(() => {
     if (view === 'month') {
-      setCurrentDate(prev => addMonths(prev, 1))
+      setCurrentDate(addMonths(currentDate, 1))
     } else {
-      setCurrentDate(prev => addWeeks(prev, 1))
+      setCurrentDate(addWeeks(currentDate, 1))
     }
-  }, [view])
+  }, [currentDate, view])
 
   const getDays = useCallback((): CalendarDay[] => {
     const start = view === 'month' 
       ? startOfMonth(currentDate) 
-      : startOfWeek(currentDate, { weekStartsOn: weekStartDay as 0 | 1 | 6 })
+      : startOfWeek(currentDate, { weekStartsOn });
     
     const end = view === 'month'
       ? endOfMonth(currentDate)
-      : endOfWeek(currentDate, { weekStartsOn: weekStartDay as 0 | 1 | 6 })
+      : endOfWeek(currentDate, { weekStartsOn });
 
     return eachDayOfInterval({ start, end }).map(date => ({
       date,
       isCurrentMonth: format(date, 'M') === format(currentDate, 'M'),
       posts: getPostsForDate(date)
     }))
-  }, [currentDate, view, weekStartDay, getPostsForDate])
+  }, [currentDate, view, weekStartsOn, getPostsForDate])
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <Button
           variant="outline"
-          size="sm"
           onClick={handlePrevious}
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
-
+        <h2 className="text-xl font-semibold">
+          {format(currentDate, 'MMMM yyyy')}
+        </h2>
         <Button
           variant="outline"
-          size="sm"
           onClick={handleNext}
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
-
-        <Tabs defaultValue={view} onValueChange={(value: 'month' | 'week') => setView(value)}>
-          <TabsList>
-            <TabsTrigger value="month">Month</TabsTrigger>
-            <TabsTrigger value="week">Week</TabsTrigger>
-          </TabsList>
-        </Tabs>
       </div>
 
-      <div className="grid grid-cols-7 gap-2">
-        {getDays().map((day, index) => (
-          <Card 
-            key={format(day.date, 'yyyy-MM-dd')}
-            className={`p-2 ${!day.isCurrentMonth ? 'opacity-50' : ''}`}
+      <Tabs value={view} onValueChange={(v) => setView(v as 'month' | 'week')}>
+        <TabsList>
+          <TabsTrigger value="month">Month</TabsTrigger>
+          <TabsTrigger value="week">Week</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      <div className="grid grid-cols-7 gap-2 mt-4">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+          <div key={day} className="text-center font-medium">
+            {day}
+          </div>
+        ))}
+        {getDays().map((day, idx) => (
+          <Card
+            key={idx}
+            className={`p-2 min-h-[100px] ${
+              !day.isCurrentMonth ? 'opacity-50' : ''
+            }`}
           >
-            <div className="text-sm font-medium">{format(day.date, 'd')}</div>
-            {day.posts.map((post: Post) => (
-              <div key={post.id} className="mt-1 text-xs">
-                {post.title}
-              </div>
-            ))}
+            <div className="text-right mb-2">{format(day.date, 'd')}</div>
+            <div className="space-y-1">
+              {day.posts.map((post) => (
+                <div
+                  key={post.id}
+                  className="text-xs p-1 bg-primary/10 rounded truncate"
+                  title={post.title}
+                >
+                  {post.title}
+                </div>
+              ))}
+            </div>
           </Card>
         ))}
       </div>
-
-      <Button
-        variant="outline"
-        size="sm"
-        className="mt-4"
-      >
-        View All Posts
-      </Button>
     </div>
   )
 }

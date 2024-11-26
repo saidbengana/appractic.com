@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Copy, Trash2 } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast"
 
 interface PostContent {
   text: string
@@ -44,6 +45,7 @@ export function PostVersionsTab({
   className,
   disabled = false
 }: PostVersionsTabProps) {
+  const { toast } = useToast()
   return (
     <div className={cn("flex flex-wrap gap-2", className)}>
       {versions.map((version) => {
@@ -70,10 +72,11 @@ export function PostVersionsTab({
                     )}
                     {version.content.media.length > 0 && (
                       <Badge
-                        variant="secondary"
+                        variant="neutral"
                         className="ml-2 h-4 rounded-sm px-1"
                       >
                         {version.content.media.length}
+                        {version.content.media.length === 1 ? ' media' : ' media'}
                       </Badge>
                     )}
                   </Button>
@@ -82,14 +85,14 @@ export function PostVersionsTab({
                     {onVersionCopy && (
                       <Button
                         variant="ghost"
-                        size="icon-xs"
-                        className={cn(
-                          "opacity-50 hover:opacity-100",
-                          disabled && "pointer-events-none"
-                        )}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          !disabled && onVersionCopy(version)
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          navigator.clipboard.writeText(version.content.text)
+                          toast({
+                            title: "Copied",
+                            description: "Content copied to clipboard",
+                          })
                         }}
                       >
                         <Copy className="h-3 w-3" />
@@ -98,15 +101,9 @@ export function PostVersionsTab({
                     {onVersionDelete && version.accountId && (
                       <Button
                         variant="ghost"
-                        size="icon-xs"
-                        className={cn(
-                          "opacity-50 hover:opacity-100 hover:text-destructive",
-                          disabled && "pointer-events-none"
-                        )}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          !disabled && onVersionDelete(version.id)
-                        }}
+                        size="icon"
+                        className="h-6 w-6 text-destructive hover:text-destructive"
+                        onClick={() => onVersionDelete?.(version.id)}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>

@@ -76,17 +76,19 @@ export function PostMedia({
                     )}
                   >
                     <MediaFile
-                      url={item.url}
-                      type={item.type}
-                      thumbnail={item.thumbnail}
-                      aspectRatio={item.aspectRatio}
-                      className="w-24 h-24 rounded-lg object-cover"
-                    />
+                      media={{
+                        is_video: item.type === "video",
+                        thumb_url: item.thumbnail,
+                        name: item.url.split("/").pop(),
+                      }}
+                    >
+                      <div className="relative h-full w-full" />
+                    </MediaFile>
                     {onMediaRemove && !disabled && (
                       <Button
                         variant="destructive"
-                        size="icon-xs"
-                        className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        size="icon"
+                        className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100"
                         onClick={() => onMediaRemove(index)}
                       >
                         <Trash2 className="h-3 w-3" />

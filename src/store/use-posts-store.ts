@@ -9,6 +9,13 @@ export interface PostMedia {
   aspectRatio?: number
 }
 
+export interface MediaItem {
+  id: string
+  url: string
+  type: 'image' | 'video'
+  alt?: string
+}
+
 export interface PostVersion {
   id: string
   accountId?: string
@@ -37,6 +44,7 @@ export interface Post {
   status: 'draft' | 'scheduled' | 'published' | 'failed'
   versions: PostVersion[]
   accounts: SocialAccount[]
+  media?: MediaItem[]
   createdAt: Date
   updatedAt: Date
 }
@@ -55,12 +63,14 @@ interface PostsState {
   addVersion: (postId: string, version: PostVersion) => void
   updateVersion: (postId: string, versionId: string, version: Partial<PostVersion>) => void
   deleteVersion: (postId: string, versionId: string) => void
+  getPost: (id: string) => Post | undefined
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
+  reset: () => void
 }
 
 export const usePostsStore = create<PostsState>()(
-  devtools((set) => ({
+  devtools((set, get) => ({
     posts: [],
     selectedPost: null,
     isLoading: false,
@@ -115,7 +125,11 @@ export const usePostsStore = create<PostsState>()(
             : post
         ),
       })),
+    getPost: (id) => get().posts.find((post) => post.id === id),
     setLoading: (loading) => set({ isLoading: loading }),
     setError: (error) => set({ error }),
+    reset: () => set({ posts: [], selectedPost: null, isLoading: false, error: null }),
   }))
 )
+
+export const usePostStore = usePostsStore // Add alias for backward compatibility

@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react'
-import { Post, CreatePostRequest, UpdatePostRequest } from '@/types/schema'
+import { Post as PostSchema, CreatePostRequest, UpdatePostRequest } from '@/types/schema'
 import { useToast } from '@/components/ui/use-toast'
 import { ScheduleConfig } from '@/types/schedule'
+import { useSchedule } from '@/hooks/use-schedule'
 
-interface Post {
+interface PostData {
   id: string
   title: string
   content: string
@@ -16,13 +17,13 @@ interface UsePostsOptions {
 }
 
 export function usePosts(options: UsePostsOptions = {}) {
-  const [posts, setPosts] = useState<Post[]>([])
+  const [posts, setPosts] = useState<PostSchema[]>([])
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
+  const { calculateNextScheduledDate } = useSchedule()
 
   const checkScheduleConflict = useCallback((schedule: ScheduleConfig, postId?: string) => {
     const conflictWindow = 15 * 60 * 1000 // 15 minutes in milliseconds
-    const { calculateNextScheduledDate } = useSchedule()
 
     // Get next 10 occurrences of the new schedule
     let currentDate = new Date()
@@ -38,31 +39,25 @@ export function usePosts(options: UsePostsOptions = {}) {
     for (const post of posts) {
       // Skip the current post being edited
       if (postId && post.id === postId) continue
-      if (!post.schedule) continue
+      if (!post.scheduledAt) continue
 
       // Get next 10 occurrences of existing post schedule
       currentDate = new Date()
       for (let i = 0; i < 10; i++) {
-        const existingDate = calculateNextScheduledDate(post.schedule, currentDate)
+        const existingDate = post.scheduledAt
         if (!existingDate) break
 
         // Check for conflicts with new schedule dates
         for (const newDate of newScheduleDates) {
           const timeDiff = Math.abs(newDate.getTime() - existingDate.getTime())
           if (timeDiff < conflictWindow) {
-            return {
-              hasConflict: true,
-              conflictingPost: post,
-              conflictTime: newDate
-            }
+            return true
           }
         }
-
-        currentDate = new Date(existingDate.getTime() + 60000)
       }
     }
 
-    return { hasConflict: false }
+    return false
   }, [posts])
 
   const fetchPosts = useCallback(async () => {
@@ -90,10 +85,25 @@ export function usePosts(options: UsePostsOptions = {}) {
     try {
       setLoading(true)
 
-      if (postData.schedule) {
-        const { hasConflict, conflictingPost, conflictTime } = checkScheduleConflict(postData.schedule)
+      // Check for schedule conflicts
+      if (postData.scheduledAt) {
+        const hasConflict = checkScheduleConflict({
+          frequency: 'once',
+          time: {
+            hour: new Date(postData.scheduledAt).getHours(),
+            minute: new Date(postData.scheduledAt).getMinutes()
+          },
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          startDate: new Date(postData.scheduledAt)
+        })
+
         if (hasConflict) {
-          throw new Error(`Schedule conflict with post "${conflictingPost?.title}" at ${conflictTime?.toLocaleString()}`)
+          toast({
+            title: "Schedule Conflict",
+            description: "Another post is already scheduled around this time.",
+            variant: "destructive"
+          })
+          return
         }
       }
 
@@ -113,24 +123,39 @@ export function usePosts(options: UsePostsOptions = {}) {
     } catch (error) {
       options.onError?.(error as Error)
       toast({
-        title: 'Error',
+        title: "Error",
         description: error instanceof Error ? error.message : 'Failed to create post',
-        variant: 'destructive'
+        variant: "destructive"
       })
       throw error
     } finally {
       setLoading(false)
     }
-  }, [checkScheduleConflict, options.onError, toast])
+  }, [toast, options.onError, checkScheduleConflict])
 
   const updatePost = useCallback(async (postId: string, postData: UpdatePostRequest) => {
     try {
       setLoading(true)
 
-      if (postData.schedule) {
-        const { hasConflict, conflictingPost, conflictTime } = checkScheduleConflict(postData.schedule, postId)
+      // Check for schedule conflicts
+      if (postData.scheduledAt) {
+        const hasConflict = checkScheduleConflict({
+          frequency: 'once',
+          time: {
+            hour: new Date(postData.scheduledAt).getHours(),
+            minute: new Date(postData.scheduledAt).getMinutes()
+          },
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          startDate: new Date(postData.scheduledAt)
+        }, postId)
+
         if (hasConflict) {
-          throw new Error(`Schedule conflict with post "${conflictingPost?.title}" at ${conflictTime?.toLocaleString()}`)
+          toast({
+            title: "Schedule Conflict",
+            description: "Another post is already scheduled around this time.",
+            variant: "destructive"
+          })
+          return
         }
       }
 
@@ -150,15 +175,15 @@ export function usePosts(options: UsePostsOptions = {}) {
     } catch (error) {
       options.onError?.(error as Error)
       toast({
-        title: 'Error',
+        title: "Error",
         description: error instanceof Error ? error.message : 'Failed to update post',
-        variant: 'destructive'
+        variant: "destructive"
       })
       throw error
     } finally {
       setLoading(false)
     }
-  }, [checkScheduleConflict, options.onError, toast])
+  }, [toast, options.onError, checkScheduleConflict])
 
   const deletePost = useCallback(async (postId: string) => {
     try {

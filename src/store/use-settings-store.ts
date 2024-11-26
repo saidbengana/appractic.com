@@ -14,24 +14,27 @@ interface Settings {
 interface SettingsState {
   settings: Settings
   updateSettings: (settings: Settings) => Promise<void>
+  reset: () => void
+}
+
+const defaultSettings: Settings = {
+  timezone: 'America/New_York',
+  timeFormat: '12',
+  weekStartsOn: '0',
+  theme: 'system',
+  notifications: true,
+  autoSave: true,
+  mediaQuality: 'high',
 }
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      settings: {
-        timezone: 'America/New_York',
-        timeFormat: '12',
-        weekStartsOn: '0',
-        theme: 'system',
-        notifications: true,
-        autoSave: true,
-        mediaQuality: 'high',
-      },
+      settings: defaultSettings,
       updateSettings: async (newSettings) => {
-        // Here you would typically sync with your backend
         set({ settings: newSettings })
       },
+      reset: () => set({ settings: defaultSettings }),
     }),
     {
       name: 'settings-storage',

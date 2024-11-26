@@ -82,6 +82,12 @@ export interface UpdatePostRequest {
   content?: string
   scheduledAt?: string | null
   status?: PostStatus
+  media?: {
+    url: string
+    type: MediaType
+    thumbnail?: string | null
+    aspectRatio?: number | null
+  }[]
 }
 
 export interface CreatePostVersionRequest {

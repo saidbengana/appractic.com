@@ -1,125 +1,97 @@
-import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs';
-import { supabase } from '@/lib/supabase';
-import { writeFile } from 'fs/promises';
-import { join } from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { getAuth } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+import { type NextRequest } from "next/server";
+import { unlink, mkdir, writeFile } from "fs/promises";
+import { join } from "path";
+import { supabase } from "@/lib/db";
+import { v4 as uuidv4 } from "uuid";
 
 // Configure media storage
 const UPLOAD_DIR = join(process.cwd(), 'public', 'uploads');
 
-export async function POST(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { userId } = auth();
+    const { userId } = getAuth(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    const { data: mediaItems, error } = await supabase
+      .from('media')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return NextResponse.json(mediaItems);
+  } catch (error) {
+    console.error("[MEDIA_GET]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const { userId } = getAuth(request);
+    if (!userId) {
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
     const formData = await request.formData();
-    const file = formData.get('file') as File;
+    const file = formData.get("file") as File;
 
     if (!file) {
-      return NextResponse.json(
-        { error: 'No file uploaded' },
-        { status: 400 }
-      );
+      return new NextResponse("No file uploaded", { status: 400 });
     }
 
-    // Generate unique filename
+    // Create uploads directory if it doesn't exist
+    try {
+      await mkdir(UPLOAD_DIR, { recursive: true });
+    } catch (error) {
+      console.error('Error creating directory:', error);
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
     const filename = `${uuidv4()}-${file.name}`;
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const filepath = join(UPLOAD_DIR, filename);
 
-    // Save file to disk
-    const path = join('uploads', filename);
-    await writeFile(join(UPLOAD_DIR, filename), buffer);
+    await writeFile(filepath, buffer);
 
-    // Create media record in database
     const { data: media, error } = await supabase
       .from('media')
       .insert({
+        id: uuidv4(),
         user_id: userId,
-        name: file.name,
-        mime_type: file.type,
-        path,
-        size: file.size,
-        size_total: file.size, // Will be updated after conversions
+        url: `/uploads/${filename}`,
+        type: file.type,
+        title: file.name,
       })
       .select()
       .single();
 
     if (error) throw error;
-
-    // TODO: Process media conversions asynchronously
-    // This will be implemented with a media processing service
-
     return NextResponse.json(media);
   } catch (error) {
-    console.error('Error uploading media:', error);
-    return NextResponse.json(
-      { error: 'Failed to upload media' },
-      { status: 500 }
-    );
+    console.error("[MEDIA_POST]", error);
+    return new NextResponse("Internal Error", { status: 500 });
   }
 }
 
-export async function GET(request: Request) {
+export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = auth();
+    const { userId } = getAuth(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const postId = searchParams.get('postId');
-
-    let query = supabase
-      .from('media')
-      .select(`
-        *,
-        posts!media_posts (
-          id
-        )
-      `)
-      .eq('user_id', userId);
-
-    if (postId) {
-      query = query.eq('posts.id', postId);
-    }
-
-    const { data: media, error } = await query
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-
-    return NextResponse.json(media);
-  } catch (error) {
-    console.error('Error fetching media:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch media' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(request: Request) {
-  try {
-    const { userId } = auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
     const mediaId = searchParams.get('id');
 
     if (!mediaId) {
-      return NextResponse.json(
-        { error: 'Media ID is required' },
-        { status: 400 }
-      );
+      return new NextResponse("Missing media ID", { status: 400 });
     }
 
-    // Check if media exists and belongs to user
+    // First verify the media belongs to the user
     const { data: media, error: findError } = await supabase
       .from('media')
       .select()
@@ -127,26 +99,13 @@ export async function DELETE(request: Request) {
       .eq('user_id', userId)
       .single();
 
-    if (findError) {
-      if (findError.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: 'Media not found' },
-          { status: 404 }
-        );
-      }
-      throw findError;
+    if (findError || !media) {
+      return new NextResponse("Media not found", { status: 404 });
     }
 
-    // Delete file from disk
-    try {
-      const filePath = join(UPLOAD_DIR, media.path.split('/').pop()!);
-      await unlink(filePath);
-    } catch (error) {
-      console.error('Error deleting file:', error);
-      // Continue with database deletion even if file deletion fails
-    }
+    const filepath = join(UPLOAD_DIR, media.url.split('/').pop());
+    await unlink(filepath);
 
-    // Delete from database
     const { error: deleteError } = await supabase
       .from('media')
       .delete()
@@ -154,13 +113,9 @@ export async function DELETE(request: Request) {
       .eq('user_id', userId);
 
     if (deleteError) throw deleteError;
-
-    return NextResponse.json({ success: true });
+    return new NextResponse(null, { status: 204 });
   } catch (error) {
-    console.error('Error deleting media:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete media' },
-      { status: 500 }
-    );
+    console.error("[MEDIA_DELETE]", error);
+    return new NextResponse("Internal Error", { status: 500 });
   }
 }

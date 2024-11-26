@@ -1,15 +1,55 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
+interface EngagementDataPoint {
+  date: string
+  likes: number
+  comments: number
+  shares: number
+}
+
+interface PostPerformancePoint {
+  date: string
+  impressions: number
+  reach: number
+  engagement: number
+}
+
+interface ActivityItem {
+  id: string
+  type: 'post' | 'engagement' | 'follower'
+  title: string
+  description: string
+  timestamp: string
+  platform: string
+  metrics?: {
+    likes?: number
+    comments?: number
+    shares?: number
+  }
+}
+
 export interface Analytics {
   totalPosts: number
+  postsGrowth: number
+  totalFollowers: number
+  followersGrowth: number
+  totalEngagement: number
   engagementRate: number
+  engagementGrowth: number
+  totalReach: number
+  reachGrowth: number
+  totalImpressions: number
+  impressionsGrowth: number
   postsByPlatform: Record<string, number>
   engagementByPlatform: Record<string, number>
   postsOverTime: Array<{
     date: string
     count: number
   }>
+  engagementData: EngagementDataPoint[]
+  postPerformance: PostPerformancePoint[]
+  recentActivity: ActivityItem[]
   period: '7_days' | '30_days' | '90_days'
 }
 
@@ -21,7 +61,7 @@ interface AnalyticsState {
   setAnalytics: (analytics: Analytics) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
-  fetchAnalytics: (period: '7_days' | '30_days' | '90_days') => Promise<void>
+  fetchAnalytics: (period: '7_days' | '30_days' | '90_days', accountId: string) => Promise<void>
 }
 
 export const useAnalyticsStore = create<AnalyticsState>()(
@@ -32,11 +72,10 @@ export const useAnalyticsStore = create<AnalyticsState>()(
     setAnalytics: (analytics) => set({ analytics }),
     setLoading: (loading) => set({ isLoading: loading }),
     setError: (error) => set({ error }),
-    fetchAnalytics: async (period) => {
+    fetchAnalytics: async (period, accountId) => {
       set({ isLoading: true, error: null })
       try {
-        // TODO: Replace with actual API call
-        const response = await fetch(`/api/analytics?period=${period}`)
+        const response = await fetch(`/api/analytics?period=${period}&accountId=${accountId}`)
         const data = await response.json()
         set({ analytics: data, isLoading: false })
       } catch (error) {

@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { ExclamationCircleIcon } from '@/components/icons/exclamation-circle'
-import { VideoSolidIcon } from '@/components/icons/video-solid'
+import { AlertTriangle, Video } from 'lucide-react'
 
 interface MediaFileProps {
   media: {
@@ -39,13 +38,13 @@ export function MediaFile({
       >
         {media.is_video && (
           <span className="absolute top-0 right-0 mt-1 mr-1">
-            <VideoSolidIcon className="w-4 h-4 text-white" />
+            <Video className="h-4 w-4 text-white" />
           </span>
         )}
 
         {media.error ? (
           <div className="text-center">
-            <ExclamationCircleIcon className="w-8 h-8 mx-auto text-red-500" />
+            <AlertTriangle className="mx-auto h-8 w-8 text-red-500" />
             <div className="mt-2">{media.name}</div>
             <div className="mt-2 text-red-500">
               {media.error || 'Error uploading media'}
@@ -54,12 +53,11 @@ export function MediaFile({
         ) : (
           <img
             src={media.thumb_url}
-            loading="lazy"
-            alt="Media preview"
+            alt={media.name}
             className={cn(
               'rounded object-cover',
               imgHeightClass,
-              imgWidthFull ? 'w-full' : ''
+              imgWidthFull && 'w-full'
             )}
           />
         )}

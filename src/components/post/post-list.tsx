@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { format } from 'date-fns'
 import { MoreHorizontal, Calendar, Trash2 } from 'lucide-react'
 import { usePosts } from '@/hooks/use-posts'
-import { Post } from '@/types/schema'
+import { Post, PostStatus } from '@/types/schema'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,34 +26,35 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { LoadingOverlay } from '@/components/ui/loading'
 
-const STATUS_COLORS = {
+const STATUS_COLORS: Record<PostStatus, string> = {
   DRAFT: 'bg-gray-500',
   SCHEDULED: 'bg-blue-500',
   PUBLISHED: 'bg-green-500',
   FAILED: 'bg-red-500',
-} as const
+}
 
 interface PostListProps {
   onEdit?: (post: Post) => void
 }
 
 export function PostList({ onEdit }: PostListProps) {
-  const { posts, isLoading, fetchPosts, deletePost } = usePosts()
+  const { posts, loading, fetchPosts, deletePost } = usePosts()
 
   useEffect(() => {
     fetchPosts()
   }, [fetchPosts])
 
-  if (isLoading && posts.length === 0) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-[400px]">
-        <div className="text-muted-foreground">Loading posts...</div>
+      <div className="flex items-center justify-center p-8">
+        <LoadingOverlay />
       </div>
     )
   }
 
-  if (!isLoading && posts.length === 0) {
+  if (!loading && posts.length === 0) {
     return (
       <div className="flex items-center justify-center h-[400px]">
         <div className="text-muted-foreground">No posts found</div>
@@ -72,8 +73,8 @@ export function PostList({ onEdit }: PostListProps) {
               </CardTitle>
               <div className="flex items-center space-x-2">
                 <Badge
-                  variant="secondary"
-                  className={STATUS_COLORS[post.status]}
+                  variant="neutral"
+                  className={STATUS_COLORS[post.status as PostStatus]}
                 >
                   {post.status.toLowerCase()}
                 </Badge>
@@ -133,7 +134,7 @@ export function PostList({ onEdit }: PostListProps) {
                   <>Created on {format(new Date(post.createdAt), 'PPP')}</>
                 )}
                 {post.versions && (
-                  <Badge variant="secondary" className="ml-2">
+                  <Badge variant="neutral" className="ml-2">
                     {post.versions.length} version{post.versions.length === 1 ? '' : 's'}
                   </Badge>
                 )}

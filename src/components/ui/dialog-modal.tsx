@@ -19,32 +19,34 @@ export interface DialogModalProps {
   isOpen: boolean
   /** Callback when the modal is closed */
   onClose: () => void
-  /** The title of the modal */
-  title?: string
-  /** The description of the modal */
+  /** Title of the modal */
+  title: string
+  /** Description of the modal */
   description?: string
-  /** The content of the modal */
+  /** Content of the modal */
   children?: React.ReactNode
-  /** The maximum width of the modal */
-  maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl" | "full"
+  /** Maximum width of the modal */
+  maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl" | "6xl" | "7xl"
   /** Whether to show the close button */
   showCloseButton?: boolean
   /** Whether to close the modal when clicking outside */
   closeOnOutsideClick?: boolean
   /** Whether to close the modal when pressing escape */
   closeOnEscape?: boolean
-  /** Whether to show a loading state */
+  /** Whether the modal is in a loading state */
   loading?: boolean
-  /** Additional class names for the modal */
+  /** Additional class name for the modal */
   className?: string
-  /** Additional class names for the content */
+  /** Additional class name for the modal content */
   contentClassName?: string
-  /** Whether to show a scroll area */
+  /** Whether the modal content is scrollable */
   scrollable?: boolean
-  /** The maximum height of the scroll area */
+  /** Maximum height of the modal */
   maxHeight?: string
-  /** The position of the modal */
+  /** Position of the modal */
   position?: "center" | "top"
+  /** Callback when the confirm button is clicked */
+  onConfirm?: () => Promise<void>
 }
 
 export function DialogModal({
@@ -63,6 +65,7 @@ export function DialogModal({
   scrollable = false,
   maxHeight = "80vh",
   position = "center",
+  onConfirm,
 }: DialogModalProps) {
   // Handle escape key
   React.useEffect(() => {
@@ -114,7 +117,7 @@ export function DialogModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <Dialog open={isOpen} onOpenChange={closeOnOutsideClick ? onClose : undefined}>
+        <Dialog open={isOpen} onOpenChange={onClose}>
           <motion.div
             className="fixed inset-0 z-50 bg-black/80"
             variants={overlayVariants}
@@ -124,77 +127,57 @@ export function DialogModal({
           />
           <DialogContent
             className={cn(
-              "fixed left-[50%] top-[50%] z-50 grid w-full translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg",
-              maxWidth === "sm" && "max-w-sm",
-              maxWidth === "md" && "max-w-md",
-              maxWidth === "lg" && "max-w-lg",
-              maxWidth === "xl" && "max-w-xl",
-              maxWidth === "2xl" && "max-w-2xl",
-              maxWidth === "full" && "max-w-[95vw]",
-              position === "top" && "top-6 translate-y-0",
-              loading && "pointer-events-none opacity-50",
+              "gap-0 p-0 outline-none",
+              maxWidth === "sm" && "sm:max-w-sm",
+              maxWidth === "md" && "sm:max-w-md",
+              maxWidth === "lg" && "sm:max-w-lg",
+              maxWidth === "xl" && "sm:max-w-xl",
+              maxWidth === "2xl" && "sm:max-w-2xl",
+              maxWidth === "3xl" && "sm:max-w-3xl",
+              maxWidth === "4xl" && "sm:max-w-4xl",
+              maxWidth === "5xl" && "sm:max-w-5xl",
+              maxWidth === "6xl" && "sm:max-w-6xl",
+              maxWidth === "7xl" && "sm:max-w-7xl",
+              position === "top" && "sm:mt-16",
               className
             )}
-            onEscapeKeyDown={(e) => {
-              if (!closeOnEscape) {
-                e.preventDefault()
-              }
-            }}
-            onInteractOutside={(e) => {
-              if (!closeOnOutsideClick) {
-                e.preventDefault()
-              }
-            }}
-            asChild
           >
-            <motion.div
-              variants={modalVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-            >
-              <div className="relative">
-                {showCloseButton && (
-                  <DialogClose asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-2 top-2"
-                      onClick={onClose}
-                    >
-                      <X className="h-4 w-4" />
-                      <span className="sr-only">Close</span>
-                    </Button>
-                  </DialogClose>
-                )}
+            {showCloseButton && (
+              <Button
+                variant="ghost"
+                className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+                onClick={onClose}
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </Button>
+            )}
 
-                {(title || description) && (
-                  <DialogHeader className="space-y-2">
-                    {title && (
-                      <DialogTitle className="text-lg font-semibold">
-                        {title}
-                      </DialogTitle>
-                    )}
-                    {description && (
-                      <DialogDescription className="text-sm text-muted-foreground">
-                        {description}
-                      </DialogDescription>
-                    )}
-                  </DialogHeader>
-                )}
+            <div className={cn("p-6", contentClassName)}>
+              <DialogHeader>
+                <DialogTitle>{title}</DialogTitle>
+                {description && <DialogDescription>{description}</DialogDescription>}
+              </DialogHeader>
 
-                <Content
-                  className={cn(
-                    "mt-4",
-                    scrollable && "max-h-[inherit] overflow-auto",
-                    contentClassName
-                  )}
-                  style={scrollable ? { maxHeight } : undefined}
-                >
+              {scrollable ? (
+                <ScrollArea className="mt-2" style={{ maxHeight }}>
                   {children}
-                </Content>
-              </div>
-            </motion.div>
+                </ScrollArea>
+              ) : (
+                <div className="mt-2">{children}</div>
+              )}
+
+              {onConfirm && (
+                <div className="mt-4 flex justify-end space-x-2">
+                  <Button variant="outline" onClick={onClose} disabled={loading}>
+                    Cancel
+                  </Button>
+                  <Button onClick={onConfirm} disabled={loading}>
+                    {loading ? "Loading..." : "Confirm"}
+                  </Button>
+                </div>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       )}
